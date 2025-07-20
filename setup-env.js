@@ -10,10 +10,12 @@ if (!fs.existsSync(envPath)) {
 
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url_here
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key_here
+NEXT_PUBLIC_GOOGLE_REDIRECT_URI=http://localhost:3000/auth/callback
 
 # Example:
 # NEXT_PUBLIC_SUPABASE_URL=https://abcdefghijklmnop.supabase.co
 # NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+# NEXT_PUBLIC_GOOGLE_REDIRECT_URI=https://your-deployed-domain.com/auth/callback
 `;
 
   fs.writeFileSync(envPath, envContent);
@@ -28,5 +30,6 @@ console.log('1. Go to your Supabase dashboard');
 console.log('2. Navigate to Settings > API');
 console.log('3. Copy your Project URL and anon key');
 console.log('4. Update the values in .env.local');
+console.log('   - Add NEXT_PUBLIC_GOOGLE_REDIRECT_URI for both local and deployed environments');
 console.log('5. Run the SQL schema from DATABASE_SCHEMA.sql in your Supabase SQL Editor');
 console.log('6. Restart your development server: npm run dev'); 
