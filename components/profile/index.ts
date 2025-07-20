@@ -1,0 +1,8 @@
+export { ProfileHeader } from './header'
+export { QuickStats } from './quick-stats'
+export { PersonalInfo } from './personal-info'
+export { FitnessGoals } from './fitness-goals'
+export { Achievements } from './achievements'
+export { AccountInfo } from './account-info'
+export { ProfileSetup } from './profile-setup'
+export { HealthMetrics } from './health-metrics' 

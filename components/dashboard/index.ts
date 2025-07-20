@@ -1,0 +1,7 @@
+export { DashboardHeader } from './header'
+export { QuickStats } from './quick-stats'
+export { ProgressCard } from './progress-card'
+export { WeeklyChart } from './weekly-chart'
+export { RecentMeals } from './recent-meals'
+export { Achievements } from './achievements'
+export { WeeklyGoals } from './weekly-goals' 

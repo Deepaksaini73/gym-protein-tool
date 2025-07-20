@@ -1,0 +1,127 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Alex Johnson",
+      "email": "alex.johnson@email.com",
+      "age": 28,
+      "gender": "male",
+      "height": 175,
+      "currentWeight": 75,
+      "targetWeight": 80,
+      "fitnessGoal": "muscle_gain",
+      "activityLevel": "moderately_active",
+      "joinDate": "2024-01-15"
+    }
+  ],
+  "foods": [
+    {
+      "id": 1,
+      "name": "Grilled Chicken Breast",
+      "calories": 165,
+      "protein": 31,
+      "carbs": 0,
+      "fats": 3.6,
+      "fiber": 0,
+      "sugar": 0,
+      "sodium": 74,
+      "per": "100g",
+      "category": "protein",
+      "barcode": "123456789012"
+    },
+    {
+      "id": 2,
+      "name": "Brown Rice",
+      "calories": 112,
+      "protein": 2.6,
+      "carbs": 23,
+      "fats": 0.9,
+      "fiber": 1.8,
+      "sugar": 0.4,
+      "sodium": 5,
+      "per": "100g",
+      "category": "carbs"
+    },
+    {
+      "id": 3,
+      "name": "Broccoli",
+      "calories": 34,
+      "protein": 2.8,
+      "carbs": 7,
+      "fats": 0.4,
+      "fiber": 2.6,
+      "sugar": 1.5,
+      "sodium": 33,
+      "per": "100g",
+      "category": "vegetables"
+    }
+  ],
+  "meals": [
+    {
+      "id": 1,
+      "userId": 1,
+      "name": "Breakfast",
+      "date": "2024-02-26",
+      "time": "08:30",
+      "foods": [{ "foodId": 4, "quantity": 150, "unit": "g" }, { "foodId": 5, "quantity": 120, "unit": "g" }],
+      "totalCalories": 235,
+      "totalProtein": 16.3,
+      "totalCarbs": 31.2,
+      "totalFats": 1.0
+    }
+  ],
+  "waterLogs": [
+    {
+      "id": 1,
+      "userId": 1,
+      "date": "2024-02-26",
+      "amount": 2250,
+      "unit": "ml"
+    }
+  ],
+  "supplements": [
+    {
+      "id": 1,
+      "name": "Whey Protein Powder",
+      "type": "protein",
+      "dosage": "30g",
+      "frequency": "daily",
+      "warnings": ["Do not exceed recommended dose"]
+    },
+    {
+      "id": 2,
+      "name": "Vitamin D3",
+      "type": "vitamin",
+      "dosage": "2000 IU",
+      "frequency": "daily",
+      "warnings": ["Consult doctor if taking other medications"]
+    }
+  ],
+  "mealPlans": [
+    {
+      "id": 1,
+      "name": "Muscle Gain Plan",
+      "goal": "muscle_gain",
+      "duration": "7 days",
+      "totalCalories": 2400,
+      "meals": [
+        {
+          "name": "High-Protein Breakfast Bowl",
+          "calories": 450,
+          "protein": 35,
+          "carbs": 45,
+          "fats": 12
+        }
+      ]
+    }
+  ],
+  "achievements": [
+    {
+      "id": 1,
+      "name": "First Week Complete",
+      "description": "Logged meals for 7 consecutive days",
+      "icon": "🎯",
+      "category": "consistency"
+    }
+  ]
+}
