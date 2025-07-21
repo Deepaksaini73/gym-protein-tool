@@ -12,6 +12,7 @@ import {
   WaterTracker,
   FoodDialog,
   CustomFoodDialog,
+  ShopItemsDialog,
 } from "@/components/food-logging"
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/auth-context'
@@ -19,6 +20,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Flame, Drumstick, Sandwich, Droplet } from 'lucide-react'
 import { Loader2 } from 'lucide-react'
 import BarcodeTab from "@/components/food-logging/barcode-tab";
+import { Button } from '@/components/ui/button'
 
 // Mock food database
 const mockFoodDatabase = [
@@ -103,6 +105,7 @@ export default function FoodLoggingPage() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [loggedMeals, setLoggedMeals] = useState<any[]>([])
   const [isListening, setIsListening] = useState(false)
+  const [isVoiceLoading, setIsVoiceLoading] = useState(false)
   const [showFoodDialog, setShowFoodDialog] = useState(false)
   const [foodDialogData, setFoodDialogData] = useState<FoodDialogData | null>(null)
   const [customFoodName, setCustomFoodName] = useState("")
@@ -114,6 +117,7 @@ export default function FoodLoggingPage() {
   const [geminiLoading, setGeminiLoading] = useState(false)
   const [waterToday, setWaterToday] = useState(0)
   const [photoLoading, setPhotoLoading] = useState(false)
+  const [showShopItemsDialog, setShowShopItemsDialog] = useState(false);
 
   const filteredFoods = mockFoodDatabase.filter((food) =>
     food.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -255,39 +259,68 @@ export default function FoodLoggingPage() {
     }
   }
 
-  const handleVoiceInput = () => {
+  // Voice recording logic for new VoiceTab
+  let recognitionRef = useRef<any>(null)
+
+  const handleVoiceStart = () => {
     setIsListening(true)
-    const recognition = new window.webkitSpeechRecognition()
-    recognition.lang = "en-US"
-    recognition.onresult = async (event) => {
+    setIsVoiceLoading(false)
+    // Use SpeechRecognition or webkitSpeechRecognition
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      alert('Speech recognition not supported in this browser.')
       setIsListening(false)
+      return
+    }
+    const recognition = new SpeechRecognition()
+    recognitionRef.current = recognition
+    recognition.lang = 'en-US'
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
+    recognition.onresult = async (event: any) => {
+      setIsListening(false)
+      setIsVoiceLoading(true)
       const transcript = event.results[0][0].transcript
       // Send transcript to AI nutrition API
-      const res = await fetch("/api/food-nutrition", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ foodName: transcript, quantity: 100, unit: "g" }),
-      })
-      const data = await res.json()
-      if (data && data.nutrition) {
-        openFoodDialog({
-          id: Date.now(),
-          name: transcript,
-          calories: data.nutrition.calories,
-          protein: data.nutrition.protein,
-          carbs: data.nutrition.carbs,
-          fats: data.nutrition.fats,
-          per: "100g",
+      try {
+        const res = await fetch('/api/food-nutrition', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ foodName: transcript, quantity: 100, unit: 'g' }),
         })
-      } else {
-        alert("Could not get nutrition info from voice input.")
+        const data = await res.json()
+        if (data && data.nutrition) {
+          openFoodDialog({
+            id: Date.now(),
+            name: transcript,
+            calories: data.nutrition.calories,
+            protein: data.nutrition.protein,
+            carbs: data.nutrition.carbs,
+            fats: data.nutrition.fats,
+            per: '100g',
+          })
+        } else {
+          alert('Could not get nutrition info from voice input.')
+        }
+      } catch (err) {
+        alert('Could not get nutrition info from voice input.')
       }
+      setIsVoiceLoading(false)
     }
     recognition.onerror = () => {
       setIsListening(false)
-      alert("Voice recognition failed.")
+      setIsVoiceLoading(false)
+      alert('Voice recognition failed.')
     }
     recognition.start()
+  }
+
+  const handleVoiceStop = () => {
+    setIsListening(false)
+    if (recognitionRef.current) {
+      recognitionRef.current.stop()
+    }
   }
 
   const openFoodDialog = (food: FoodItem) => {
@@ -389,6 +422,14 @@ export default function FoodLoggingPage() {
       }
     }
   }
+
+  // Handler for shop item submit
+  const handleShopItemSubmit = (item: any) => {
+    openFoodDialog({
+      ...item,
+      per: item.per || `${item.quantity}${item.unit}`,
+    });
+  };
 
   // Insert or update water log for today
   const addWater = async (amount: number) => {
@@ -568,6 +609,18 @@ export default function FoodLoggingPage() {
             fats: food.fats ?? 0,
           })}
         />
+        {/* Shop/Street Food Add Button */}
+        <Button
+          className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 rounded shadow mb-2"
+          onClick={() => setShowShopItemsDialog(true)}
+        >
+          Add Shop/Street Food
+        </Button>
+        <ShopItemsDialog
+          open={showShopItemsDialog}
+          onOpenChange={setShowShopItemsDialog}
+          onSubmit={handleShopItemSubmit}
+        />
 
         {/* Manual Food Entry */}
         <QuickAdd
@@ -614,7 +667,12 @@ export default function FoodLoggingPage() {
 
           {/* Voice Tab */}
           <TabsContent value="voice">
-            <VoiceTab isListening={isListening} onVoiceInput={handleVoiceInput} />
+            <VoiceTab
+              isListening={isListening}
+              isLoading={isVoiceLoading}
+              onStart={handleVoiceStart}
+              onStop={handleVoiceStop}
+            />
           </TabsContent>
         </Tabs>
 

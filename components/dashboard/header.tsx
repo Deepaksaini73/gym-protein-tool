@@ -3,9 +3,10 @@ import { Flame } from "lucide-react"
 interface HeaderProps {
   name: string
   streak: number
+  maxStreak?: number
 }
 
-export function DashboardHeader({ name, streak }: HeaderProps) {
+export function DashboardHeader({ name, streak, maxStreak }: HeaderProps) {
   return (
     <div className="text-center space-y-3">
       <div className="flex items-center justify-center space-x-2">
@@ -13,6 +14,9 @@ export function DashboardHeader({ name, streak }: HeaderProps) {
           <Flame className="w-5 h-5 text-orange-600" />
           <span className="font-bold text-orange-800">{streak}</span>
           <span className="text-sm text-orange-700">day streak</span>
+          {typeof maxStreak === "number" && (
+            <span className="ml-3 text-xs text-orange-600">(Max: {maxStreak})</span>
+          )}
         </div>
       </div>
       <div>

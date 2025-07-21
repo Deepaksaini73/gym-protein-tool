@@ -1,3 +1,4 @@
+"use client"
 import {
   Dialog,
   DialogContent,
@@ -52,7 +53,22 @@ export function FoodDialog({
         </DialogHeader>
         <div className="space-y-4">
           <div className="text-center p-4 bg-gray-50 rounded-lg">
-            <h3 className="font-medium text-gray-900">{foodDialogData.food.name}</h3>
+            <Input
+              id="foodName"
+              type="text"
+              value={foodDialogData.food.name}
+              onChange={e =>
+                onFoodDialogDataChange({
+                  ...foodDialogData,
+                  food: {
+                    ...foodDialogData.food,
+                    name: e.target.value,
+                  },
+                })
+              }
+              className="font-medium text-gray-900 text-center text-lg border-2 focus:border-emerald-300 mb-2"
+              autoFocus
+            />
             <p className="text-sm text-gray-600">
               {Math.round(foodDialogData.food.calories * (foodDialogData.quantity / 100))} calories,{" "}
               {Math.round(foodDialogData.food.protein * (foodDialogData.quantity / 100) * 10) / 10}g protein

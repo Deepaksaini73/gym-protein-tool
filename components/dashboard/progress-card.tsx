@@ -24,9 +24,10 @@ interface DailyIntake {
 interface ProgressCardProps {
   dailyGoals: DailyGoals
   dailyIntake: DailyIntake
+  hideWaterAdd?: boolean
 }
 
-export function ProgressCard({ dailyGoals, dailyIntake }: ProgressCardProps) {
+export function ProgressCard({ dailyGoals, dailyIntake, hideWaterAdd }: ProgressCardProps) {
   const calorieProgress = (dailyIntake.calories / dailyGoals.calories) * 100
   const proteinProgress = (dailyIntake.protein / dailyGoals.protein) * 100
   const carbProgress = (dailyIntake.carbs / dailyGoals.carbs) * 100
@@ -109,40 +110,42 @@ export function ProgressCard({ dailyGoals, dailyIntake }: ProgressCardProps) {
             </span>
           </div>
           <Progress value={waterProgress} className="h-3 bg-cyan-200 mb-3" />
-          <div className="grid grid-cols-4 gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-2 border-cyan-300 text-cyan-700 hover:bg-cyan-100 bg-transparent text-xs"
-              onClick={() => addWater(250)}
-            >
-              +250ml
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-2 border-cyan-300 text-cyan-700 hover:bg-cyan-100 bg-transparent text-xs"
-              onClick={() => addWater(500)}
-            >
-              +500ml
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-2 border-cyan-300 text-cyan-700 hover:bg-cyan-100 bg-transparent text-xs"
-              onClick={() => addWater(750)}
-            >
-              +750ml
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-2 border-cyan-300 text-cyan-700 hover:bg-cyan-100 bg-transparent text-xs"
-              onClick={() => addWater(1000)}
-            >
-              +1L
-            </Button>
-          </div>
+          {!hideWaterAdd && (
+            <div className="grid grid-cols-4 gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-2 border-cyan-300 text-cyan-700 hover:bg-cyan-100 bg-transparent text-xs"
+                onClick={() => addWater(250)}
+              >
+                +250ml
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-2 border-cyan-300 text-cyan-700 hover:bg-cyan-100 bg-transparent text-xs"
+                onClick={() => addWater(500)}
+              >
+                +500ml
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-2 border-cyan-300 text-cyan-700 hover:bg-cyan-100 bg-transparent text-xs"
+                onClick={() => addWater(750)}
+              >
+                +750ml
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-2 border-cyan-300 text-cyan-700 hover:bg-cyan-100 bg-transparent text-xs"
+                onClick={() => addWater(1000)}
+              >
+                +1L
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Quick Add Food Button */}
