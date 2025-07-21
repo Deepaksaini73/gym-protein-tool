@@ -7,7 +7,6 @@ import {
   QuickAdd,
   SearchTab,
   PhotoTab,
-  BarcodeTab,
   VoiceTab,
   TodaysMeals,
   WaterTracker,
@@ -19,6 +18,7 @@ import { useAuth } from '@/contexts/auth-context'
 import { Card, CardContent } from '@/components/ui/card'
 import { Flame, Drumstick, Sandwich, Droplet } from 'lucide-react'
 import { Loader2 } from 'lucide-react'
+import BarcodeTab from "@/components/food-logging/barcode-tab";
 
 // Mock food database
 const mockFoodDatabase = [
@@ -113,6 +113,7 @@ export default function FoodLoggingPage() {
   const geminiTimeout = useRef<NodeJS.Timeout | null>(null)
   const [geminiLoading, setGeminiLoading] = useState(false)
   const [waterToday, setWaterToday] = useState(0)
+  const [photoLoading, setPhotoLoading] = useState(false)
 
   const filteredFoods = mockFoodDatabase.filter((food) =>
     food.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -175,13 +176,21 @@ export default function FoodLoggingPage() {
     }
   }, [searchQuery])
 
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // New: handle photo upload and AI analysis only on 'Add' click
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
       setSelectedImage(file)
+    }
+  }
+
+  const handlePhotoAnalyze = async () => {
+    if (!selectedImage) return
+    setPhotoLoading(true)
+    try {
       // Send to AI API for recognition
       const formData = new FormData()
-      formData.append("image", file)
+      formData.append("image", selectedImage)
       const res = await fetch("/api/food-photo-ai", {
         method: "POST",
         body: formData,
@@ -205,14 +214,16 @@ export default function FoodLoggingPage() {
             fats: nutritionData.nutrition.fats,
             per: nutritionData.nutrition.per || "100g",
           })
-          setSelectedImage(null) // Clear image after success
         } else {
           alert("Could not get nutrition info for detected food.")
         }
       } else {
         alert("Could not recognize food from photo.")
       }
+    } catch (err) {
+      alert("Error contacting AI service.")
     }
+    setPhotoLoading(false)
   }
 
   // Barcode search with Gemini
@@ -503,6 +514,14 @@ export default function FoodLoggingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
+  // When food dialog closes or food is added, clear selected image
+  const handleFoodDialogOpenChange = (open: boolean) => {
+    setShowFoodDialog(open)
+    if (!open) {
+      setSelectedImage(null)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 pb-24">
       <div className="px-4 py-6 space-y-6">
@@ -580,17 +599,17 @@ export default function FoodLoggingPage() {
 
           {/* Photo Tab */}
           <TabsContent value="photo">
-            <PhotoTab selectedImage={selectedImage} onImageUpload={handleImageUpload} />
+            <PhotoTab
+              selectedImage={selectedImage}
+              onImageUpload={handleImageUpload}
+              onAddPhoto={handlePhotoAnalyze}
+              loading={photoLoading}
+            />
           </TabsContent>
 
           {/* Barcode Tab */}
           <TabsContent value="barcode">
-            <BarcodeTab
-              barcodeInput={barcodeInput}
-              onBarcodeInputChange={setBarcodeInput}
-              onBarcodeSearch={handleBarcodeSearch}
-              mockBarcodes={mockBarcodes}
-            />
+            <BarcodeTab onFoodSelect={openFoodDialog} />
           </TabsContent>
 
           {/* Voice Tab */}
@@ -612,7 +631,7 @@ export default function FoodLoggingPage() {
         {/* Food Confirmation Dialog */}
         <FoodDialog
           open={showFoodDialog}
-          onOpenChange={setShowFoodDialog}
+          onOpenChange={handleFoodDialogOpenChange}
           foodDialogData={foodDialogData}
           onFoodDialogDataChange={setFoodDialogData}
           onAddFood={handleAddFood}
