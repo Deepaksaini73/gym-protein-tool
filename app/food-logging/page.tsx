@@ -130,26 +130,30 @@ export default function FoodLoggingPage() {
       setGeminiLoading(true)
       if (geminiTimeout.current) clearTimeout(geminiTimeout.current)
       geminiTimeout.current = setTimeout(async () => {
-        const res = await fetch("/api/food-search-gemini", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query: searchQuery }),
-        })
-        const data = await res.json()
-        if (data && data.suggestions) {
-          setGeminiSuggestions(data.suggestions.map((item: any, idx: number) => ({
-            id: 10000 + idx,
-            name: item.name,
-            calories: item.calories,
-            protein: item.protein,
-            carbs: item.carbs,
-            fats: item.fats,
-            per: "1 serving",
-          })))
-        } else {
+        try {
+          const res = await fetch("/api/food-search-gemini", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ query: searchQuery }),
+          })
+          const data = await res.json()
+          if (data && data.suggestions) {
+            setGeminiSuggestions(data.suggestions.map((item: any, idx: number) => ({
+              id: 10000 + idx,
+              name: item.name,
+              calories: item.calories,
+              protein: item.protein,
+              carbs: item.carbs,
+              fats: item.fats,
+              per: "1 serving",
+            })))
+          } else {
+            setGeminiSuggestions([])
+          }
+        } catch (err) {
           setGeminiSuggestions([])
         }
-        setGeminiLoading(false)
+        setGeminiLoading(false) // <-- always set loading to false
       }, 500)
     } else {
       setGeminiSuggestions([])
@@ -340,6 +344,40 @@ export default function FoodLoggingPage() {
     })();
   }
 
+  const fetchTodaysMeals = async () => {
+    if (!user) return
+    const today = new Date().toISOString().slice(0, 10)
+    const { data } = await supabase
+      .from('food_logs')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('date', today)
+      .order('created_at', { ascending: true })
+    if (data) {
+      const meals = ['breakfast', 'lunch', 'dinner', 'snack'].map((meal) => ({
+        name: meal.charAt(0).toUpperCase() + meal.slice(1),
+        id: meal,
+        items: data.filter((item) => item.meal_type === meal).map((item) => ({
+          food: item.food_name,
+          quantity: item.quantity,
+          calories: item.calories,
+          protein: item.protein,
+          logId: item.id,
+        })),
+        totalCalories: data.filter((item) => item.meal_type === meal).reduce((sum, item) => sum + (item.calories || 0), 0),
+        time: '',
+      }))
+      setLoggedMeals(meals)
+    }
+  }
+
+  useEffect(() => {
+    if (user) {
+      fetchTodaysMeals()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 pb-24">
       <div className="px-4 py-6 space-y-6">
@@ -372,7 +410,15 @@ export default function FoodLoggingPage() {
         <FoodLoggingHeader />
 
         {/* Quick Popular Foods */}
-        <PopularFoods popularFoods={popularFoods} onFoodSelect={openFoodDialog} />
+        <PopularFoods
+          popularFoods={popularFoods}
+          onFoodSelect={(food) => openFoodDialog({
+            ...food,
+            per: food.per || "100g", // Ensure 'per' is always present
+            carbs: food.carbs ?? 0,
+            fats: food.fats ?? 0,
+          })}
+        />
 
         {/* Manual Food Entry */}
         <QuickAdd
