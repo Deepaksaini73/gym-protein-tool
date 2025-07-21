@@ -9,7 +9,28 @@ export async function POST(req: NextRequest) {
     if (!query) {
       return NextResponse.json({ error: 'Missing query.' }, { status: 400 })
     }
-    const prompt = `Suggest 5 foods similar to "${query}" with their nutrition facts (calories, protein, carbs, fats). Respond ONLY in JSON: [{ "name": string, "calories": number, "protein": number, "carbs": number, "fats": number }]`;
+const prompt = `You are a nutrition expert. Given a food item "${query}", suggest 5 similar or commonly eaten foods (preferably Indian if "${query}" is Indian) along with detailed nutrition facts per standard serving. Respond ONLY in **valid JSON array format** (no text outside JSON).
+
+Each item must include:
+- "name": name of the food,
+- "calories": total calories (kcal),
+- "protein": grams of protein,
+- "carbs": grams of carbohydrates,
+- "fats": grams of fat.
+
+If "${query}" is unclear or missing, suggest 5 popular healthy foods instead.
+
+Return format:
+[
+  {
+    "name": "Food Name",
+    "calories": 0,
+    "protein": 0,
+    "carbs": 0,
+    "fats": 0
+  },
+  ...
+]`;
     const geminiRes = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

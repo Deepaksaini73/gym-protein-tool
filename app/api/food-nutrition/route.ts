@@ -9,7 +9,13 @@ export async function POST(req: NextRequest) {
     if (!foodName || !quantity || !unit) {
       return NextResponse.json({ error: 'Missing foodName, quantity, or unit.' }, { status: 400 })
     }
-    const prompt = `Give me the nutrition facts (calories, protein, carbs, fats) for ${quantity} ${unit} of ${foodName}. Respond ONLY in JSON like this: { "calories": number, "protein": number, "carbs": number, "fats": number }`;
+const prompt = `
+Give me the nutrition facts (calories, protein, carbs, fats) for ${quantity} ${unit} of "${foodName}". 
+If the food name is unclear or not recognized, use the closest common or similar food (especially Indian/global foods). 
+NEVER return null, undefined, or NaN — always provide realistic numeric values.
+Respond ONLY in this exact JSON format:
+{ "calories": number, "protein": number, "carbs": number, "fats": number }
+`;
     const geminiRes = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

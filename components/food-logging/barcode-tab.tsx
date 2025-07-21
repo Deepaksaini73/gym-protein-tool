@@ -2,6 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Scan } from "lucide-react"
+import { useState } from "react"
 
 interface BarcodeItem {
   code: string
@@ -65,4 +66,4 @@ export function BarcodeTab({
       </CardContent>
     </Card>
   )
-} 
+}

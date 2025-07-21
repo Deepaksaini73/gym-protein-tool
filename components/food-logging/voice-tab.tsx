@@ -57,4 +57,4 @@ export function VoiceTab({ isListening, onVoiceInput }: VoiceTabProps) {
       </CardContent>
     </Card>
   )
-} 
+}

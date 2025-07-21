@@ -24,15 +24,22 @@ import { Loader2 } from 'lucide-react'
 const mockFoodDatabase = [
   { id: 1, name: "Grilled Chicken Breast", calories: 165, protein: 31, carbs: 0, fats: 3.6, per: "100g" },
   { id: 2, name: "Brown Rice", calories: 112, protein: 2.6, carbs: 23, fats: 0.9, per: "100g" },
-  { id: 3, name: "Broccoli", calories: 34, protein: 2.8, carbs: 7, fats: 0.4, per: "100g" },
-  { id: 4, name: "Greek Yogurt", calories: 59, protein: 10, carbs: 3.6, fats: 0.4, per: "100g" },
-  { id: 5, name: "Banana", calories: 89, protein: 1.1, carbs: 23, fats: 0.3, per: "100g" },
-  { id: 6, name: "Salmon Fillet", calories: 208, protein: 25, carbs: 0, fats: 12, per: "100g" },
-  { id: 7, name: "Sweet Potato", calories: 86, protein: 1.6, carbs: 20, fats: 0.1, per: "100g" },
-  { id: 8, name: "Almonds", calories: 579, protein: 21, carbs: 22, fats: 50, per: "100g" },
-  { id: 9, name: "Avocado", calories: 160, protein: 2, carbs: 9, fats: 15, per: "100g" },
-  { id: 10, name: "Eggs", calories: 155, protein: 13, carbs: 1.1, fats: 11, per: "100g" },
-]
+  { id: 3, name: "Banana", calories: 89, protein: 1.1, carbs: 23, fats: 0.3, per: "100g" },
+  { id: 4, name: "Sweet Potato", calories: 86, protein: 1.6, carbs: 20, fats: 0.1, per: "100g" },
+  { id: 5, name: "Avocado", calories: 160, protein: 2, carbs: 9, fats: 15, per: "100g" },
+  { id: 6, name: "Eggs", calories: 155, protein: 13, carbs: 1.1, fats: 11, per: "100g" },
+
+  // Indian Food Items
+  { id: 7, name: "Paneer", calories: 296, protein: 18.3, carbs: 1.2, fats: 22, per: "100g" },
+  { id: 8, name: "Dal (Cooked Lentils)", calories: 116, protein: 9, carbs: 20, fats: 3, per: "100g" },
+  { id: 9, name: "Roti (Whole Wheat)", calories: 110, protein: 3, carbs: 18, fats: 3, per: "1 medium (40g)" },
+  { id: 10, name: "Chana (Boiled)", calories: 164, protein: 8.9, carbs: 27.4, fats: 2.6, per: "100g" },
+  { id: 11, name: "Poha", calories: 130, protein: 2.6, carbs: 27, fats: 1.5, per: "100g" },
+  { id: 12, name: "Idli", calories: 58, protein: 2, carbs: 12, fats: 0.4, per: "1 idli (40g)" },
+  { id: 13, name: "Upma", calories: 131, protein: 3.5, carbs: 20, fats: 4, per: "100g" },
+  { id: 14, name: "Rajma (Boiled)", calories: 127, protein: 8.7, carbs: 22.8, fats: 0.5, per: "100g" },
+];
+
 
 const mockBarcodes = [
   { code: "123456789", name: "Protein Bar - Chocolate", calories: 200, protein: 20, carbs: 15, fats: 8 },
@@ -65,7 +72,7 @@ const todaysMeals = [
 ]
 
 const popularFoods = [
-  { id: 1, name: "Grilled Chicken Breast", calories: 165, protein: 31 },
+  { id: 1, name: "Grilled Chicken", calories: 165, protein: 31 },
   { id: 4, name: "Greek Yogurt", calories: 59, protein: 10 },
   { id: 5, name: "Banana", calories: 89, protein: 1.1 },
   { id: 6, name: "Salmon Fillet", calories: 208, protein: 25 },
@@ -105,12 +112,13 @@ export default function FoodLoggingPage() {
   const [geminiSuggestions, setGeminiSuggestions] = useState<any[]>([])
   const geminiTimeout = useRef<NodeJS.Timeout | null>(null)
   const [geminiLoading, setGeminiLoading] = useState(false)
+  const [waterToday, setWaterToday] = useState(0)
 
   const filteredFoods = mockFoodDatabase.filter((food) =>
     food.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Calculate today's summary
+  // Calculate today's summary (add waterToday)
   const summary = loggedMeals.reduce(
     (acc, meal) => {
       meal.items.forEach((item: any) => {
@@ -123,6 +131,9 @@ export default function FoodLoggingPage() {
     },
     { calories: 0, protein: 0, carbs: 0, fats: 0 }
   )
+
+  // Add water to summary object
+  summary.water = waterToday
 
   // Smart Gemini-powered search (show suggestions even if local match is partial)
   useEffect(() => {
@@ -164,11 +175,43 @@ export default function FoodLoggingPage() {
     }
   }, [searchQuery])
 
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
       setSelectedImage(file)
-      alert("Image uploaded! AI analysis will identify the food and estimate nutrition.")
+      // Send to AI API for recognition
+      const formData = new FormData()
+      formData.append("image", file)
+      const res = await fetch("/api/food-photo-ai", {
+        method: "POST",
+        body: formData,
+      })
+      const data = await res.json()
+      if (data && data.nutrition && data.nutrition.food_name) {
+        // Now get nutrition info from food name
+        const nutritionRes = await fetch("/api/food-nutrition", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ foodName: data.nutrition.food_name, quantity: 100, unit: "g" }),
+        })
+        const nutritionData = await nutritionRes.json()
+        if (nutritionData && nutritionData.nutrition) {
+          openFoodDialog({
+            id: Date.now(),
+            name: data.nutrition.food_name,
+            calories: nutritionData.nutrition.calories,
+            protein: nutritionData.nutrition.protein,
+            carbs: nutritionData.nutrition.carbs,
+            fats: nutritionData.nutrition.fats,
+            per: nutritionData.nutrition.per || "100g",
+          })
+          setSelectedImage(null) // Clear image after success
+        } else {
+          alert("Could not get nutrition info for detected food.")
+        }
+      } else {
+        alert("Could not recognize food from photo.")
+      }
     }
   }
 
@@ -203,10 +246,37 @@ export default function FoodLoggingPage() {
 
   const handleVoiceInput = () => {
     setIsListening(true)
-    setTimeout(() => {
+    const recognition = new window.webkitSpeechRecognition()
+    recognition.lang = "en-US"
+    recognition.onresult = async (event) => {
       setIsListening(false)
-      alert("Voice recognized: 'I had grilled chicken with rice and broccoli'")
-    }, 3000)
+      const transcript = event.results[0][0].transcript
+      // Send transcript to AI nutrition API
+      const res = await fetch("/api/food-nutrition", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ foodName: transcript, quantity: 100, unit: "g" }),
+      })
+      const data = await res.json()
+      if (data && data.nutrition) {
+        openFoodDialog({
+          id: Date.now(),
+          name: transcript,
+          calories: data.nutrition.calories,
+          protein: data.nutrition.protein,
+          carbs: data.nutrition.carbs,
+          fats: data.nutrition.fats,
+          per: "100g",
+        })
+      } else {
+        alert("Could not get nutrition info from voice input.")
+      }
+    }
+    recognition.onerror = () => {
+      setIsListening(false)
+      alert("Voice recognition failed.")
+    }
+    recognition.start()
   }
 
   const openFoodDialog = (food: FoodItem) => {
@@ -255,6 +325,9 @@ export default function FoodLoggingPage() {
               quantity: item.quantity,
               calories: item.calories,
               protein: item.protein,
+              carbs: item.carbs ?? 0,   // <-- add this line
+              fats: item.fats ?? 0,     // <-- add this line
+              logId: item.id,
             })),
             totalCalories: data.filter((item) => item.meal_type === meal).reduce((sum, item) => sum + (item.calories || 0), 0),
             time: '',
@@ -306,8 +379,55 @@ export default function FoodLoggingPage() {
     }
   }
 
-  const addWater = (amount: number) => {
-    alert(`Added ${amount}ml water to your log!`)
+  // Insert or update water log for today
+  const addWater = async (amount: number) => {
+    if (!user) return
+    const today = new Date().toISOString().slice(0, 10)
+
+    // Check if entry exists for this user and date
+    const { data: existing, error: fetchError } = await supabase
+      .from('water_logs')
+      .select('*')
+      .eq('user_id', user.id) // user.id should match user_profiles.user_id
+      .eq('date', today)
+      .single()
+
+    if (fetchError && fetchError.code !== 'PGRST116') {
+      alert('Failed to log water.')
+      return
+    }
+
+    if (existing) {
+      // Update the amount
+      const { error } = await supabase
+        .from('water_logs')
+        .update({ amount: existing.amount + amount })
+        .eq('id', existing.id)
+      if (!error) fetchWaterToday()
+    } else {
+      // Insert new entry
+      const { error } = await supabase.from('water_logs').insert({
+        user_id: user.id,
+        date: today,
+        amount,
+      })
+      if (!error) fetchWaterToday()
+    }
+  }
+
+  // Fetch today's water total
+  const fetchWaterToday = async () => {
+    if (!user) return
+    const today = new Date().toISOString().slice(0, 10)
+    const { data } = await supabase
+      .from('water_logs')
+      .select('amount')
+      .eq('user_id', user.id)
+      .eq('date', today)
+    if (data) {
+      const total = data.reduce((sum, row) => sum + (row.amount || 0), 0)
+      setWaterToday(total)
+    }
   }
 
   // Delete food log from Supabase
@@ -333,6 +453,8 @@ export default function FoodLoggingPage() {
               quantity: item.quantity,
               calories: item.calories,
               protein: item.protein,
+              carbs: item.carbs ?? 0,   // <-- add this line
+              fats: item.fats ?? 0,     // <-- add this line
               logId: item.id,
             })),
             totalCalories: data.filter((item) => item.meal_type === meal).reduce((sum, item) => sum + (item.calories || 0), 0),
@@ -362,6 +484,8 @@ export default function FoodLoggingPage() {
           quantity: item.quantity,
           calories: item.calories,
           protein: item.protein,
+          carbs: item.carbs ?? 0,   // <-- add this line
+          fats: item.fats ?? 0,     // <-- add this line
           logId: item.id,
         })),
         totalCalories: data.filter((item) => item.meal_type === meal).reduce((sum, item) => sum + (item.calories || 0), 0),
@@ -374,6 +498,7 @@ export default function FoodLoggingPage() {
   useEffect(() => {
     if (user) {
       fetchTodaysMeals()
+      fetchWaterToday()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
@@ -403,6 +528,11 @@ export default function FoodLoggingPage() {
               <Droplet className="w-6 h-6 text-blue-500 mb-1" />
               <span className="font-bold text-lg text-gray-900">{summary.fats}</span>
               <span className="text-xs text-gray-600">Fats (g)</span>
+            </div>
+            <div className="flex flex-col items-center flex-1">
+              <Droplet className="w-6 h-6 text-cyan-500 mb-1" />
+              <span className="font-bold text-lg text-gray-900">{summary.water}</span>
+              <span className="text-xs text-gray-600">Water (ml)</span>
             </div>
           </CardContent>
         </Card>
