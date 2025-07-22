@@ -67,13 +67,11 @@ export const calculateDailyCalories = (
   } else if (gender === 'female') {
     bmr = 10 * weight + 6.25 * height - 5 * age - 161
   } else {
-    // Average between male & female if unknown
     bmr = 10 * weight + 6.25 * height - 5 * age - 78
   }
 
   let tdee = bmr
 
-  // Activity multiplier
   switch (activityLevel) {
     case 'sedentary':
       tdee = bmr * 1.2
@@ -82,35 +80,32 @@ export const calculateDailyCalories = (
       tdee = bmr * 1.375
       break
     case 'moderately_active':
-      tdee = bmr * 1.55
+      tdee = bmr * 1.5 // lowered slightly for better prediction
       break
     case 'very_active':
-      tdee = bmr * 1.725
+      tdee = bmr * 1.7 // lowered slightly for better prediction
       break
     default:
-      tdee = bmr * 1.2 // fallback to sedentary
+      tdee = bmr * 1.2
   }
 
-  // Goal adjustment
   switch (fitnessGoal) {
     case 'muscle_gain':
-      tdee += 300
+      tdee += 250 // lowered from 300
       break
     case 'fat_loss':
-      tdee -= 500
+      tdee -= 400 // lowered from 500
       break
     case 'maintenance':
-      // No change
       break
     case 'endurance':
-      tdee += 200
+      tdee += 150 // lowered from 200
       break
   }
 
   return Math.round(tdee)
 }
 
-// Calculate macronutrient goals
 export const calculateMacroGoals = (dailyCalories: number, fitnessGoal: string) => {
   let proteinRatio: number
   let carbsRatio: number
@@ -118,37 +113,38 @@ export const calculateMacroGoals = (dailyCalories: number, fitnessGoal: string) 
 
   switch (fitnessGoal) {
     case 'muscle_gain':
-      proteinRatio = 0.3 // 30%
-      carbsRatio = 0.45 // 45%
-      fatsRatio = 0.25 // 25%
+      proteinRatio = 0.25 // reduced from 30%
+      carbsRatio = 0.5
+      fatsRatio = 0.25
       break
     case 'fat_loss':
-      proteinRatio = 0.35 // 35%
-      carbsRatio = 0.35 // 35%
-      fatsRatio = 0.3 // 30%
+      proteinRatio = 0.3 // reduced from 35%
+      carbsRatio = 0.4
+      fatsRatio = 0.3
       break
     case 'maintenance':
-      proteinRatio = 0.25 // 25%
-      carbsRatio = 0.5 // 50%
-      fatsRatio = 0.25 // 25%
+      proteinRatio = 0.2 // reduced from 25%
+      carbsRatio = 0.55
+      fatsRatio = 0.25
       break
     case 'endurance':
-      proteinRatio = 0.2 // 20%
-      carbsRatio = 0.6 // 60%
-      fatsRatio = 0.2 // 20%
+      proteinRatio = 0.15
+      carbsRatio = 0.65
+      fatsRatio = 0.2
       break
     default:
-      proteinRatio = 0.25
-      carbsRatio = 0.5
+      proteinRatio = 0.2
+      carbsRatio = 0.55
       fatsRatio = 0.25
   }
 
   return {
-    protein: Math.round((dailyCalories * proteinRatio) / 4), // 4 calories per gram
+    protein: Math.round((dailyCalories * proteinRatio) / 4),
     carbs: Math.round((dailyCalories * carbsRatio) / 4),
-    fats: Math.round((dailyCalories * fatsRatio) / 9), // 9 calories per gram
+    fats: Math.round((dailyCalories * fatsRatio) / 9),
   }
-}
+} 
+
 
 // Get user profile
 export const getUserProfile = async (userId: string): Promise<UserProfile | null> => {
@@ -288,4 +284,74 @@ export const updateUserProfile = async (userId: string, updateData: UpdateProfil
     console.error('Error updating user profile:', error)
     throw error
   }
-} 
+}
+
+export interface UserStreak {
+  id: string
+  user_id: string
+  current_streak: number
+  max_streak: number
+  updated_at: string
+}
+
+export interface UserAchievement {
+  id: string
+  user_id: string
+  achievement_name: string
+  achievement_icon: string
+  earned_at: string
+}
+
+export async function getUserStreaks(userId: string): Promise<UserStreak | null> {
+  const { data, error } = await supabase
+    .from('user_streaks')
+    .select('*')
+    .eq('user_id', userId)
+    .single()
+
+  if (error && error.code !== 'PGRST116') {
+    console.error('Error fetching user streaks:', error)
+    return null
+  }
+  return data
+}
+
+export async function getUserAchievements(userId: string): Promise<UserAchievement[]> {
+  const { data, error } = await supabase
+    .from('user_achievements')
+    .select('*')
+    .eq('user_id', userId)
+
+  if (error) {
+    console.error('Error fetching user achievements:', error)
+    return []
+  }
+  return data || []
+}
+
+// Add Feedback Interface
+export interface Feedback {
+  id: string
+  user_id: string
+  user_email: string
+  user_name: string
+  issue_type: 'bug' | 'feature' | 'improvement' | 'other'
+  description: string
+  feature_request?: string
+  status: 'pending' | 'resolved'
+  usability_rating: number
+  health_impact_rating: number
+  created_at: string
+}
+
+// Add Feedback Database Function
+export async function submitFeedback(feedback: Omit<Feedback, 'id' | 'created_at'>) {
+  const { data, error } = await supabase
+    .from('feedback')
+    .insert([feedback])
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}

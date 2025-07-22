@@ -14,15 +14,35 @@ import {
   HealthMetrics,
 } from "@/components/profile"
 import { UserProfile } from "@/components/auth"
-import { getUserProfile, createUserProfile, updateUserProfile, UserProfile as UserProfileType, CreateProfileData, UpdateProfileData } from "@/lib/database"
+import { getUserProfile, createUserProfile, updateUserProfile, 
+         getUserStreaks, getUserAchievements } from "@/lib/database"
 import { toast } from "sonner"
+import { FeedbackButton } from "@/components/shared/feedback-button"
+import { FeedbackForm } from "@/components/shared/feedback-form"
 
-const mockAchievements = [
-  { name: "First Week", icon: "🎯", earned: true },
-  { name: "Protein Champion", icon: "💪", earned: true },
-  { name: "Hydration Hero", icon: "💧", earned: false },
-  { name: "Meal Prep Master", icon: "🍱", earned: true },
+const AVAILABLE_ACHIEVEMENTS = [
+  { name: "First Week", icon: "🎯", id: "first_week" },
+  { name: "Protein Champion", icon: "💪", id: "protein_champ" },
+  { name: "Hydration Hero", icon: "💧", id: "hydration_hero" },
+  { name: "Meal Prep Master", icon: "🍱", id: "meal_master" },
 ]
+
+// Add type for profile update
+type ProfileUpdateData = {
+  full_name: string
+  age: number
+  gender: 'male' | 'female' | 'other'
+  height: number
+  current_weight: number
+  fitness_goal: 'muscle_gain' | 'fat_loss' | 'maintenance' | 'endurance'
+  target_weight: number
+  activity_level: 'sedentary' | 'lightly_active' | 'moderately_active' | 'very_active'
+  daily_calorie_goal: number
+  daily_water_goal: number
+  daily_protein_goal: number
+  daily_carbs_goal: number
+  daily_fats_goal: number
+}
 
 export default function ProfilePage() {
   const { user, loading } = useAuth()
@@ -31,79 +51,77 @@ export default function ProfilePage() {
   const [isEditing, setIsEditing] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [showSetup, setShowSetup] = useState(false)
+  const [streakData, setStreakData] = useState<UserStreak | null>(null)
+  const [userAchievements, setUserAchievements] = useState<any[]>([])
+  const [isStatsLoading, setIsStatsLoading] = useState(true)
+  const [showFeedback, setShowFeedback] = useState(false)
 
   useEffect(() => {
+    const loadUserData = async () => {
+      if (!user) return
+      
+      console.log('Starting data load...')
+      setIsLoading(true)
+      setIsStatsLoading(true)
+
+      try {
+        const [profileData, streaksData, achievementsData] = await Promise.all([
+          getUserProfile(user.id),
+          getUserStreaks(user.id),
+          getUserAchievements(user.id)
+        ])
+
+        console.log('Profile data:', profileData)
+        console.log('Streaks data:', streaksData)
+        console.log('Achievements data:', achievementsData)
+
+        if (profileData) {
+          setProfile(profileData)
+          setShowSetup(false)
+        } else {
+          setShowSetup(true)
+        }
+
+        if (streaksData) {
+          setStreakData(streaksData)
+        }
+
+        setUserAchievements(achievementsData || [])
+
+      } catch (error) {
+        console.error('Error loading user data:', error)
+        toast.error('Failed to load profile data')
+      } finally {
+        setIsLoading(false)
+        setIsStatsLoading(false)
+        console.log('Data load complete')
+      }
+    }
+
     if (user && !loading) {
-      loadUserProfile()
+      loadUserData()
     }
   }, [user, loading])
 
-  const loadUserProfile = async () => {
-    if (!user) return
-    
-    setIsLoading(true)
-    try {
-      const userProfile = await getUserProfile(user.id)
-      if (userProfile) {
-        setProfile(userProfile)
-      } else {
-        setShowSetup(true)
-      }
-    } catch (error) {
-      console.error('Error loading profile:', error)
-      toast.error('Failed to load profile')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleProfileSetup = async (profileData: CreateProfileData) => {
-    if (!user) return
-
-    try {
-      const newProfile = await createUserProfile(user.id, profileData)
-      if (newProfile) {
-        setProfile(newProfile)
-        setShowSetup(false)
-        toast.success('Profile created successfully!')
-      } else {
-        toast.error('Failed to create profile')
-      }
-    } catch (error) {
-      console.error('Error creating profile:', error)
-      toast.error('Failed to create profile')
-    }
-  }
-
-  const handleProfileUpdate = async (updateData: UpdateProfileData) => {
-    if (!user || !profile) return
-
-    try {
-      const updatedProfile = await updateUserProfile(user.id, updateData)
-      if (updatedProfile) {
-        setProfile(updatedProfile)
-        setIsEditing(false)
-        toast.success('Profile updated successfully!')
-      } else {
-        toast.error('Failed to update profile')
-      }
-    } catch (error) {
-      console.error('Error updating profile:', error)
-      toast.error('Failed to update profile')
-    }
-  }
-
-  const handleSkipSetup = () => {
-    setShowSetup(false)
-    toast.info('You can complete your profile later')
-  }
-
+  // Simplify loading check
   if (loading || isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
+          <p className="mt-4 text-gray-600">Loading profile...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Move profile check after loading check
+  if (!profile && !showSetup) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading profile data...</p>
         </div>
       </div>
     )
@@ -120,6 +138,76 @@ export default function ProfilePage() {
     )
   }
 
+  const handleProfileUpdate = async (updateData: ProfileUpdateData) => {
+    if (!user) return
+
+    try {
+      const updatedProfile = await updateUserProfile(user.id, updateData)
+      if (updatedProfile) {
+        setProfile(updatedProfile)
+        setEditProfile(null)
+        toast.success('Profile updated successfully!')
+      } else {
+        throw new Error('Failed to update profile')
+      }
+    } catch (error) {
+      console.error('Error updating profile:', error)
+      toast.error('Failed to update profile. Please try again.')
+    }
+  }
+
+  const handleProfileSetup = async (setupData: ProfileUpdateData) => {
+    if (!user) return
+
+    try {
+      const newProfile = await createUserProfile(user.id, setupData)
+      if (newProfile) {
+        setProfile(newProfile)
+        setShowSetup(false)
+        toast.success('Profile created successfully!')
+      } else {
+        throw new Error('Failed to create profile')
+      }
+    } catch (error) {
+      console.error('Error creating profile:', error)
+      toast.error('Failed to create profile. Please try again.')
+    }
+  }
+
+  const handleSkipSetup = async () => {
+    // Create minimal profile
+    if (!user) return
+    
+    const minimalProfile = {
+      full_name: user.user_metadata?.full_name || 'User',
+      email: user.email || '',
+      age: 25,
+      gender: 'other' as const,
+      height: 170,
+      current_weight: 70,
+      fitness_goal: 'maintenance' as const,
+      target_weight: 70,
+      activity_level: 'moderately_active' as const,
+      daily_calorie_goal: 2000,
+      daily_water_goal: 2000,
+      daily_protein_goal: 60,
+      daily_carbs_goal: 250,
+      daily_fats_goal: 65,
+    }
+
+    try {
+      const newProfile = await createUserProfile(user.id, minimalProfile)
+      if (newProfile) {
+        setProfile(newProfile)
+        setShowSetup(false)
+        toast.success('Basic profile created!')
+      }
+    } catch (error) {
+      console.error('Error creating basic profile:', error)
+      toast.error('Failed to create basic profile')
+    }
+  }
+
   if (showSetup) {
     return (
       <ProfileSetup
@@ -128,17 +216,6 @@ export default function ProfilePage() {
         onComplete={handleProfileSetup}
         onSkip={handleSkipSetup}
       />
-    )
-  }
-
-  if (!profile) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading profile...</p>
-        </div>
-      </div>
     )
   }
 
@@ -185,8 +262,9 @@ export default function ProfilePage() {
           {/* Quick Stats */}
           <QuickStats
             bmi={profile.bmi.toString()}
-            longestStreak={23} // This would come from another table
-            totalMealsLogged={156} // This would come from another table
+            longestStreak={streakData?.max_streak || 0}
+            totalMealsLogged={profile.total_meals_logged || 0}
+            isLoading={isStatsLoading}
           />
 
           {/* Personal Information */}
@@ -273,12 +351,28 @@ export default function ProfilePage() {
           />
 
           {/* Achievements */}
-          <Achievements achievements={mockAchievements} />
+          <Achievements 
+            achievements={AVAILABLE_ACHIEVEMENTS.map(ach => ({
+              ...ach,
+              earned: userAchievements.some(ua => ua.achievement_name === ach.name)
+            }))}
+            isLoading={isStatsLoading}
+          />
 
           {/* Account Info */}
           <AccountInfo joinDate={profile.created_at} />
         </div>
       </div>
+
+      {/* Feedback Button and Form */}
+      <FeedbackButton onClick={() => setShowFeedback(true)} />
+      <FeedbackForm
+        open={showFeedback}
+        onOpenChange={setShowFeedback}
+        userEmail={user?.email || ''}
+        userName={user?.user_metadata?.full_name || 'Anonymous'}
+        userId={user?.id}
+      />
     </div>
   )
 }

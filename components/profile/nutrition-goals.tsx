@@ -17,6 +17,12 @@ interface NutritionGoalsProps {
 }
 
 export function NutritionGoals({ goals, isEditing, onGoalsChange }: NutritionGoalsProps) {
+  // Helper function to handle empty/null values
+  const handleNumberInput = (value: string, field: keyof NutritionGoals) => {
+    const numberValue = value === "" ? 0 : Number(value)
+    onGoalsChange({ ...goals, [field]: numberValue })
+  }
+
   return (
     <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
       <CardHeader>
@@ -31,20 +37,22 @@ export function NutritionGoals({ goals, isEditing, onGoalsChange }: NutritionGoa
             <label className="text-sm font-medium text-gray-700">Calories (kcal)</label>
             <Input
               type="number"
-              value={goals.daily_calorie_goal}
-              onChange={e => onGoalsChange({ ...goals, daily_calorie_goal: Number(e.target.value) })}
+              value={goals.daily_calorie_goal || ""}
+              onChange={e => handleNumberInput(e.target.value, "daily_calorie_goal")}
               disabled={!isEditing}
               className="border-2 focus:border-emerald-300"
+              min="0"
             />
           </div>
           <div>
             <label className="text-sm font-medium text-gray-700">Water (ml)</label>
             <Input
               type="number"
-              value={goals.daily_water_goal}
-              onChange={e => onGoalsChange({ ...goals, daily_water_goal: Number(e.target.value) })}
+              value={goals.daily_water_goal || ""}
+              onChange={e => handleNumberInput(e.target.value, "daily_water_goal")}
               disabled={!isEditing}
               className="border-2 focus:border-emerald-300"
+              min="0"
             />
           </div>
         </div>
@@ -53,30 +61,33 @@ export function NutritionGoals({ goals, isEditing, onGoalsChange }: NutritionGoa
             <label className="text-sm font-medium text-gray-700">Protein (g)</label>
             <Input
               type="number"
-              value={goals.daily_protein_goal}
-              onChange={e => onGoalsChange({ ...goals, daily_protein_goal: Number(e.target.value) })}
+              value={goals.daily_protein_goal || ""}
+              onChange={e => handleNumberInput(e.target.value, "daily_protein_goal")}
               disabled={!isEditing}
               className="border-2 focus:border-emerald-300"
+              min="0"
             />
           </div>
           <div>
             <label className="text-sm font-medium text-gray-700">Carbs (g)</label>
             <Input
               type="number"
-              value={goals.daily_carbs_goal}
-              onChange={e => onGoalsChange({ ...goals, daily_carbs_goal: Number(e.target.value) })}
+              value={goals.daily_carbs_goal || ""}
+              onChange={e => handleNumberInput(e.target.value, "daily_carbs_goal")}
               disabled={!isEditing}
               className="border-2 focus:border-emerald-300"
+              min="0"
             />
           </div>
           <div>
             <label className="text-sm font-medium text-gray-700">Fats (g)</label>
             <Input
               type="number"
-              value={goals.daily_fats_goal}
-              onChange={e => onGoalsChange({ ...goals, daily_fats_goal: Number(e.target.value) })}
+              value={goals.daily_fats_goal || ""}
+              onChange={e => handleNumberInput(e.target.value, "daily_fats_goal")}
               disabled={!isEditing}
               className="border-2 focus:border-emerald-300"
+              min="0"
             />
           </div>
         </div>

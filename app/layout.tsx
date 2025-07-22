@@ -4,6 +4,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { BottomNavigation } from "@/components/bottom-navigation"
 import { AuthProvider } from "@/contexts/auth-context"
+import { Toaster } from 'sonner'
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -23,6 +24,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <AuthProvider>
           {children}
+           {/* <Toaster /> */}
           <BottomNavigation />
         </AuthProvider>
       </body>

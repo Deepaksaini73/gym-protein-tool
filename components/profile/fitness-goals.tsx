@@ -16,6 +16,12 @@ interface FitnessGoalsProps {
 }
 
 export function FitnessGoals({ goals, isEditing, onGoalsChange }: FitnessGoalsProps) {
+  // Helper function to handle empty/null values
+  const handleNumberInput = (value: string) => {
+    const numberValue = value === '' ? 0 : Number(value)
+    onGoalsChange({ ...goals, targetWeight: numberValue })
+  }
+
   return (
     <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
       <CardHeader>
@@ -49,10 +55,11 @@ export function FitnessGoals({ goals, isEditing, onGoalsChange }: FitnessGoalsPr
               <label className="text-sm font-medium text-gray-700">Target Weight (kg)</label>
               <Input
                 type="number"
-                value={goals.targetWeight}
-                onChange={(e) => onGoalsChange({ ...goals, targetWeight: Number.parseInt(e.target.value) })}
+                value={goals.targetWeight || ''}
+                onChange={(e) => handleNumberInput(e.target.value)}
                 disabled={!isEditing}
                 className="border-2 focus:border-emerald-300"
+                min="0"
               />
             </div>
             <div>
@@ -78,4 +85,4 @@ export function FitnessGoals({ goals, isEditing, onGoalsChange }: FitnessGoalsPr
       </CardContent>
     </Card>
   )
-} 
+}

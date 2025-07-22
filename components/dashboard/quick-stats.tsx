@@ -21,10 +21,10 @@ export function QuickStats({ totalMeals, avgCalories, bestStreak }: QuickStatsPr
           <p className="text-xs text-blue-600">Avg Calories</p>
         </CardContent>
       </Card>
-      <Card className="shadow-lg border-0 bg-gradient-to-br from-purple-50 to-purple-100 border-2 border-purple-200">
+      <Card className="shadow-lg border-0 bg-gradient-to-br from-orange-50 to-orange-100 border-2 border-orange-200">
         <CardContent className="p-4 text-center">
-          <div className="text-xl font-bold text-purple-700">{bestStreak}</div>
-          <p className="text-xs text-purple-600">Best Streak</p>
+          <div className="text-xl font-bold text-orange-700">{bestStreak}</div>
+          <p className="text-xs text-orange-600">Best Streak</p>
         </CardContent>
       </Card>
     </div>

@@ -1,6 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useAuth } from "@/contexts/auth-context"
+import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,82 +10,482 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 import { Calendar, TrendingUp, Target, Award, Download, Share2, BarChart3 } from "lucide-react"
+import { ReportTrendsChart } from "@/components/reports/ReportTrendsChart";
+import { generatePDF } from '@/lib/pdf-generator'
+import { FeedbackButton } from "@/components/shared/feedback-button"
+import { FeedbackForm } from "@/components/shared/feedback-form"
 
-// Mock data for reports
-const weeklyData = {
-  period: "March 18-24, 2024",
-  summary: {
-    avgCalories: 2050,
-    avgProtein: 142,
-    avgCarbs: 195,
-    avgFats: 68,
-    avgWater: 2800,
-    daysCompleted: 6,
-    totalMeals: 21,
-    calorieGoalHit: 5,
-    proteinGoalHit: 6,
-    waterGoalHit: 4,
-  },
-  dailyBreakdown: [
-    { day: "Mon", calories: 2100, protein: 140, carbs: 200, fats: 70, water: 2800, goalsMet: 3 },
-    { day: "Tue", calories: 1950, protein: 135, carbs: 180, fats: 65, water: 3200, goalsMet: 4 },
-    { day: "Wed", calories: 2250, protein: 155, carbs: 210, fats: 75, water: 2900, goalsMet: 4 },
-    { day: "Thu", calories: 2050, protein: 145, carbs: 195, fats: 68, water: 3100, goalsMet: 4 },
-    { day: "Fri", calories: 1900, protein: 130, carbs: 170, fats: 60, water: 2700, goalsMet: 2 },
-    { day: "Sat", calories: 2300, protein: 160, carbs: 220, fats: 80, water: 3300, goalsMet: 4 },
-    { day: "Sun", calories: 1850, protein: 125, carbs: 180, fats: 65, water: 2250, goalsMet: 3 },
-  ],
+
+const calculateGoalsMet = (dayLogs: any[], waterLog: any, profile: any) => {
+  let goalsCount = 0;
+  
+  // Calculate daily totals
+  const dailyCalories = dayLogs.reduce((sum, log) => sum + (log.calories || 0), 0)
+  const dailyProtein = dayLogs.reduce((sum, log) => sum + (log.protein || 0), 0)
+  const dailyCarbs = dayLogs.reduce((sum, log) => sum + (log.carbs || 0), 0)
+  const dailyFats = dayLogs.reduce((sum, log) => sum + (log.fats || 0), 0)
+  const dailyWater = waterLog?.amount || 0
+
+  // Check if goals are met (now checking all 4 goals)
+  if (dailyCalories >= (profile?.daily_calorie_goal || 0)) goalsCount++
+  if (dailyProtein >= (profile?.daily_protein_goal || 0)) goalsCount++
+  if (dailyCarbs >= (profile?.daily_carbs_goal || 0)) goalsCount++
+  if (dailyWater >= (profile?.daily_water_goal || 0)) goalsCount++
+
+  return goalsCount
 }
 
-const monthlyData = {
-  period: "March 2024",
-  summary: {
-    avgCalories: 2080,
-    avgProtein: 145,
-    avgCarbs: 198,
-    avgFats: 70,
-    avgWater: 2850,
-    daysCompleted: 28,
-    totalMeals: 84,
-    bestWeek: "Week 3",
-    worstWeek: "Week 1",
-    streakRecord: 12,
-    weightChange: +2.3,
-  },
-  weeklyBreakdown: [
-    { week: "Week 1", avgCalories: 1980, goalsHit: 15, rating: "Good" },
-    { week: "Week 2", avgCalories: 2120, goalsHit: 18, rating: "Excellent" },
-    { week: "Week 3", avgCalories: 2150, goalsHit: 20, rating: "Excellent" },
-    { week: "Week 4", avgCalories: 2070, goalsHit: 17, rating: "Very Good" },
-  ],
-  topFoods: [
-    { name: "Grilled Chicken Breast", count: 18, calories: 2970 },
-    { name: "Brown Rice", count: 15, calories: 1680 },
-    { name: "Greek Yogurt", count: 12, calories: 708 },
-    { name: "Broccoli", count: 10, calories: 340 },
-    { name: "Banana", count: 8, calories: 712 },
-  ],
-  insights: [
-    { type: "success", message: "You consistently hit your protein goals this month!" },
-    { type: "warning", message: "Water intake was below target on 8 days" },
-    { type: "info", message: "Your best performance was during Week 3" },
-    { type: "tip", message: "Consider adding more vegetables to increase fiber intake" },
-  ],
+const findBestWeek = (foodLogs: any[], profile: any) => {
+  // Group logs by week
+  const weeklyLogs = foodLogs.reduce((acc: any, log) => {
+    const weekNum = Math.floor(new Date(log.date).getDate() / 7) + 1
+    if (!acc[weekNum]) acc[weekNum] = []
+    acc[weekNum].push(log)
+    return acc
+  }, {})
+
+  // Find week with highest goal achievement
+  let bestWeek = 1
+  let bestScore = 0
+
+  Object.entries(weeklyLogs).forEach(([week, logs]: [string, any]) => {
+    const weekScore = (logs as any[]).reduce((score, log) => {
+      if (log.calories >= (profile?.daily_calorie_goal || 0)) score++
+      if (log.protein >= (profile?.daily_protein_goal || 0)) score++
+      return score
+    }, 0)
+
+    if (weekScore > bestScore) {
+      bestScore = weekScore
+      bestWeek = parseInt(week)
+    }
+  })
+
+  return `Week ${bestWeek}`
 }
+
+const findWorstWeek = (foodLogs: any[], profile: any) => {
+  // Similar to findBestWeek but finds lowest score
+  const weeklyLogs = foodLogs.reduce((acc: any, log) => {
+    const weekNum = Math.floor(new Date(log.date).getDate() / 7) + 1
+    if (!acc[weekNum]) acc[weekNum] = []
+    acc[weekNum].push(log)
+    return acc
+  }, {})
+
+  let worstWeek = 1
+  let worstScore = Number.MAX_VALUE
+
+  Object.entries(weeklyLogs).forEach(([week, logs]: [string, any]) => {
+    const weekScore = (logs as any[]).reduce((score, log) => {
+      if (log.calories >= (profile?.daily_calorie_goal || 0)) score++
+      if (log.protein >= (profile?.daily_protein_goal || 0)) score++
+      return score
+    }, 0)
+
+    if (weekScore < worstScore) {
+      worstScore = weekScore
+      worstWeek = parseInt(week)
+    }
+  })
+
+  return `Week ${worstWeek}`
+}
+
+const calculateLongestStreak = (foodLogs: any[]) => {
+  if (!foodLogs.length) return 0
+
+  // Sort logs by date
+  const sortedDates = [...new Set(foodLogs.map(log => log.date))].sort()
+  
+  let currentStreak = 1
+  let maxStreak = 1
+
+  for (let i = 1; i < sortedDates.length; i++) {
+    const prevDate = new Date(sortedDates[i - 1])
+    const currDate = new Date(sortedDates[i])
+    
+    const diffDays = Math.floor((currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24))
+    
+    if (diffDays === 1) {
+      currentStreak++
+      maxStreak = Math.max(maxStreak, currentStreak)
+    } else {
+      currentStreak = 1
+    }
+  }
+
+  return maxStreak
+}
+
+const calculateWeightChange = (profile: any) => {
+  // This would need historical weight data
+  // For now, return a mock value or 0
+  return 0
+}
+
+// Add getRating function at the top with other helper functions
+const getRating = (goalsHit: number) => {
+  if (goalsHit >= 20) return "Excellent"
+  if (goalsHit >= 15) return "Very Good"
+  if (goalsHit >= 10) return "Good"
+  return "Needs Improvement"
+}
+
+// Add these functions before the ReportsPage component
+const exportReport = (data: any, profileData: any) => {
+    return generatePDF(data, profileData)
+  }
+
+const shareReport = async (data: any, profile: any) => {
+  try {
+    const fileName = exportReport(data, profile);
+    
+    if (navigator.share) {
+      // Create a blob from the PDF
+      const response = await fetch(fileName);
+      const blob = await response.blob();
+      
+      // Create a File object
+      const file = new File([blob], fileName, { type: 'application/pdf' });
+
+      // Share the file
+      await navigator.share({
+        title: 'My Nutrition Report',
+        text: 'Check out my nutrition progress!',
+        files: [file]
+      });
+    } else {
+      // Fallback - just save the PDF locally
+      alert('Sharing not supported on this device. PDF has been downloaded instead.');
+    }
+  } catch (err) {
+    console.error('Error sharing:', err);
+    alert('There was an error sharing the report. Please try downloading it instead.');
+  }
+};
+
 
 export default function ReportsPage() {
+  const { user } = useAuth()
   const [selectedPeriod, setSelectedPeriod] = useState("weekly")
-  const [selectedWeek, setSelectedWeek] = useState("current")
+  const [loading, setLoading] = useState(true)
+  const [profile, setProfile] = useState<any>(null)
+  const [weeklyData, setWeeklyData] = useState<any>(null)
+  const [monthlyData, setMonthlyData] = useState<any>(null)
+  const [showFeedback, setShowFeedback] = useState(false)
 
-  const currentData = selectedPeriod === "weekly" ? weeklyData : monthlyData
+  // Move calculateGoalsHitInWeek inside component to access profile
+  const calculateGoalsHitInWeek = (foodLogs: any[], waterLogs: any[], weekStart: Date, weekEnd: Date) => {
+    let totalGoalsHit = 0
 
-  const exportReport = () => {
-    alert("Report exported as PDF! (Feature will be implemented)")
+    for (let date = new Date(weekStart); date <= weekEnd; date.setDate(date.getDate() + 1)) {
+      const dateStr = date.toISOString().slice(0, 10)
+      const dayLogs = foodLogs.filter(log => log.date === dateStr)
+      const waterLog = waterLogs.find(log => log.date === dateStr)
+
+      totalGoalsHit += calculateGoalsMet(dayLogs, waterLog, profile)
+    }
+
+    return totalGoalsHit
   }
 
-  const shareReport = () => {
-    alert("Report shared! (Feature will be implemented)")
+  useEffect(() => {
+    if (!user) return
+
+    const fetchReportData = async () => {
+      setLoading(true)
+      try {
+        // Get date ranges
+        const today = new Date()
+        const weekAgo = new Date(today)
+        weekAgo.setDate(today.getDate() - 7)
+        const monthAgo = new Date(today)
+        monthAgo.setDate(today.getDate() - 30)
+
+        // Format dates for query
+        const todayStr = today.toISOString().slice(0, 10)
+        const weekAgoStr = weekAgo.toISOString().slice(0, 10)
+        const monthAgoStr = monthAgo.toISOString().slice(0, 10)
+
+        // Fetch all required data
+        const [profileData, weekFoodLogs, monthFoodLogs, weekWaterLogs, monthWaterLogs, achievements] = await Promise.all([
+          // Get user profile
+          supabase.from('user_profiles').select('*').eq('user_id', user.id).single(),
+          // Get week's food logs
+          supabase.from('food_logs').select('*')
+            .eq('user_id', user.id)
+            .gte('date', weekAgoStr)
+            .lte('date', todayStr),
+          // Get month's food logs
+          supabase.from('food_logs').select('*')
+            .eq('user_id', user.id)
+            .gte('date', monthAgoStr)
+            .lte('date', todayStr),
+          // Get week's water logs
+          supabase.from('water_logs').select('*')
+            .eq('user_id', user.id)
+            .gte('date', weekAgoStr)
+            .lte('date', todayStr),
+          // Get month's water logs
+          supabase.from('water_logs').select('*')
+            .eq('user_id', user.id)
+            .gte('date', monthAgoStr)
+            .lte('date', todayStr),
+          // Get achievements
+          supabase.from('user_achievements').select('*')
+            .eq('user_id', user.id)
+        ])
+
+        setProfile(profileData.data)
+
+        // Process Weekly Data
+        const weeklyProcessed = {
+          period: `${weekAgoStr} to ${todayStr}`,
+          summary: calculateWeeklySummary(weekFoodLogs.data || [], weekWaterLogs.data || [], profileData.data),
+          dailyBreakdown: processDailyBreakdown(weekFoodLogs.data || [], weekWaterLogs.data || [], weekAgoStr, todayStr),
+        }
+        setWeeklyData(weeklyProcessed)
+
+        // Process Monthly Data
+        const monthlyProcessed = {
+          period: `${new Date(monthAgoStr).toLocaleString('default', { month: 'long' })} ${new Date(monthAgoStr).getFullYear()}`,
+          summary: calculateMonthlySummary(monthFoodLogs.data || [], monthWaterLogs.data || [], profileData.data),
+          weeklyBreakdown: processWeeklyBreakdown(monthFoodLogs.data || [], monthWaterLogs.data || [], monthAgoStr, todayStr),
+          topFoods: calculateTopFoods(monthFoodLogs.data || []),
+          insights: generateInsights(monthFoodLogs.data || [], monthWaterLogs.data || [], profileData.data),
+        }
+        setMonthlyData(monthlyProcessed)
+
+      } catch (error) {
+        console.error("Error fetching report data:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchReportData()
+  }, [user])
+
+  // Helper functions
+  const calculateWeeklySummary = (foodLogs: any[], waterLogs: any[], profile: any) => {
+    return {
+      avgCalories: Math.round(foodLogs.reduce((sum, log) => sum + (log.calories || 0), 0) / 7),
+      avgProtein: Math.round(foodLogs.reduce((sum, log) => sum + (log.protein || 0), 0) / 7),
+      avgCarbs: Math.round(foodLogs.reduce((sum, log) => sum + (log.carbs || 0), 0) / 7),
+      avgFats: Math.round(foodLogs.reduce((sum, log) => sum + (log.fats || 0), 0) / 7),
+      avgWater: Math.round(waterLogs.reduce((sum, log) => sum + (log.amount || 0), 0) / 7),
+      daysCompleted: new Set(foodLogs.map(log => log.date)).size,
+      totalMeals: foodLogs.length,
+      calorieGoalHit: foodLogs.filter(log => log.calories >= (profile?.daily_calorie_goal || 0)).length,
+      proteinGoalHit: foodLogs.filter(log => log.protein >= (profile?.daily_protein_goal || 0)).length,
+      waterGoalHit: waterLogs.filter(log => log.amount >= (profile?.daily_water_goal || 0)).length,
+    }
   }
+
+  const processDailyBreakdown = (foodLogs: any[], waterLogs: any[], startDate: string, endDate: string) => {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const result = []
+    
+    let currentDate = new Date(startDate)
+    const end = new Date(endDate)
+
+    while (currentDate <= end) {
+      const dateStr = currentDate.toISOString().slice(0, 10)
+      const dayLogs = foodLogs.filter(log => log.date === dateStr)
+      const waterLog = waterLogs.find(log => log.date === dateStr)
+
+      result.push({
+        // Add dateStr to make the key unique
+        key: `${days[currentDate.getDay()]}-${dateStr}`,
+        day: days[currentDate.getDay()],
+        date: dateStr,
+        calories: dayLogs.reduce((sum, log) => sum + (log.calories || 0), 0),
+        protein: dayLogs.reduce((sum, log) => sum + (log.protein || 0), 0),
+        carbs: dayLogs.reduce((sum, log) => sum + (log.carbs || 0), 0),
+        fats: dayLogs.reduce((sum, log) => sum + (log.fats || 0), 0),
+        water: waterLog?.amount || 0,
+        goalsMet: calculateGoalsMet(dayLogs, waterLog, profile),
+      })
+
+      currentDate.setDate(currentDate.getDate() + 1)
+    }
+
+    return result
+  }
+
+  const calculateMonthlySummary = (foodLogs: any[], waterLogs: any[], profile: any) => {
+    const totalDays = 30 // or use actual days in month
+    return {
+      avgCalories: Math.round(foodLogs.reduce((sum, log) => sum + (log.calories || 0), 0) / totalDays),
+      avgProtein: Math.round(foodLogs.reduce((sum, log) => sum + (log.protein || 0), 0) / totalDays),
+      avgCarbs: Math.round(foodLogs.reduce((sum, log) => sum + (log.carbs || 0), 0) / totalDays),
+      avgFats: Math.round(foodLogs.reduce((sum, log) => sum + (log.fats || 0), 0) / totalDays),
+      avgWater: Math.round(waterLogs.reduce((sum, log) => sum + (log.amount || 0), 0) / totalDays),
+      daysCompleted: new Set(foodLogs.map(log => log.date)).size,
+      totalMeals: foodLogs.length,
+      bestWeek: findBestWeek(foodLogs, profile),
+      worstWeek: findWorstWeek(foodLogs, profile),
+      streakRecord: calculateLongestStreak(foodLogs),
+      weightChange: calculateWeightChange(profile),
+    }
+  }
+
+  const processWeeklyBreakdown = (foodLogs: any[], waterLogs: any[], startDate: string, endDate: string) => {
+    const weeks = ['Week 1', 'Week 2', 'Week 3', 'Week 4']
+    const result = []
+
+    // Split logs into weeks
+    for (let i = 0; i < 4; i++) {
+      const weekStart = new Date(startDate)
+      weekStart.setDate(weekStart.getDate() + (i * 7))
+      const weekEnd = new Date(weekStart)
+      weekEnd.setDate(weekStart.getDate() + 6)
+
+      const weekLogs = foodLogs.filter(log => {
+        const logDate = new Date(log.date)
+        return logDate >= weekStart && logDate <= weekEnd
+      })
+
+      const avgCalories = Math.round(weekLogs.reduce((sum, log) => sum + (log.calories || 0), 0) / 7)
+      const goalsHit = calculateGoalsHitInWeek(weekLogs, waterLogs, weekStart, weekEnd)
+
+      result.push({
+        week: `Week ${i + 1}`,
+        avgCalories,
+        goalsHit,
+        rating: getRating(goalsHit)
+      })
+    }
+
+    return result
+  }
+
+  const calculateTopFoods = (foodLogs: any[]) => {
+    // Group by food name and count occurrences
+    const foodCounts = foodLogs.reduce((acc: any, log) => {
+      const key = log.food_name
+      if (!acc[key]) {
+        acc[key] = {
+          name: key,
+          count: 0,
+          calories: 0
+        }
+      }
+      acc[key].count++
+      acc[key].calories += log.calories || 0
+      return acc
+    }, {})
+
+    // Convert to array and sort by count
+    return Object.values(foodCounts)
+      .sort((a: any, b: any) => b.count - a.count)
+      .slice(0, 5)
+  }
+
+  const generateInsights = (foodLogs: any[], waterLogs: any[], profile: any) => {
+    const insights = []
+
+    // Protein goal achievement
+    const proteinGoalDays = foodLogs.filter(log => log.protein >= (profile?.daily_protein_goal || 0)).length
+    if (proteinGoalDays >= 20) {
+      insights.push({
+        type: "success",
+        message: "You consistently hit your protein goals this month!"
+      })
+    }
+
+    // Water intake warning
+    const waterGoalDays = waterLogs.filter(log => log.amount >= (profile?.daily_water_goal || 0)).length
+    const missedWaterDays = 30 - waterGoalDays
+    if (missedWaterDays > 7) {
+      insights.push({
+        type: "warning",
+        message: `Water intake was below target on ${missedWaterDays} days`
+      })
+    }
+
+    // Best performance week
+    const bestWeek = findBestWeek(foodLogs, profile)
+    insights.push({
+      type: "info",
+      message: `Your best performance was during ${bestWeek}`
+    })
+
+    // Nutrition balance tip
+    const avgCarbs = foodLogs.reduce((sum, log) => sum + (log.carbs || 0), 0) / foodLogs.length
+    if (avgCarbs < (profile?.daily_carbs_goal || 0) * 0.8) {
+      insights.push({
+        type: "tip",
+        message: "Consider adding more complex carbs to balance your nutrition"
+      })
+    }
+
+    return insights
+  }
+
+  // Initialize default data structures
+  const defaultMonthlyData = {
+    period: '',
+    summary: {
+      avgCalories: 0,
+      avgProtein: 0,
+      avgCarbs: 0,
+      avgFats: 0,
+      avgWater: 0,
+      daysCompleted: 0,
+      totalMeals: 0,
+      bestWeek: 'No data',
+      worstWeek: 'No data',
+      streakRecord: 0,
+      weightChange: 0
+    },
+    weeklyBreakdown: [],
+    topFoods: [],
+    insights: []
+  }
+
+  const defaultWeeklyData = {
+    period: '',
+    summary: {
+      avgCalories: 0,
+      avgProtein: 0,
+      avgCarbs: 0,
+      avgFats: 0,
+      avgWater: 0,
+      daysCompleted: 0,
+      totalMeals: 0,
+      calorieGoalHit: 0,
+      proteinGoalHit: 0,
+      waterGoalHit: 0
+    },
+    dailyBreakdown: []
+  }
+
+  // Get current data based on selected period
+  const currentData = selectedPeriod === "weekly" 
+    ? (weeklyData || defaultWeeklyData) 
+    : (monthlyData || defaultMonthlyData);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading reports...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Inside ReportsPage component
+  const handleExport = () => {
+    exportReport(currentData, profile);
+  };
+
+  const handleShare = async () => {
+    await shareReport(currentData, profile);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 pb-24">
@@ -98,7 +500,7 @@ export default function ReportsPage() {
               variant="outline"
               size="sm"
               className="border-2 border-blue-200 text-blue-700 hover:bg-blue-50 bg-transparent"
-              onClick={exportReport}
+              onClick={handleExport}
             >
               <Download className="w-4 h-4 mr-2" />
               Export PDF
@@ -107,7 +509,7 @@ export default function ReportsPage() {
               variant="outline"
               size="sm"
               className="border-2 border-green-200 text-green-700 hover:bg-green-50 bg-transparent"
-              onClick={shareReport}
+              onClick={handleShare}
             >
               <Share2 className="w-4 h-4 mr-2" />
               Share
@@ -245,11 +647,11 @@ export default function ReportsPage() {
                   <div className="space-y-4">
                     {selectedPeriod === "weekly" ? (
                       <div className="grid grid-cols-7 gap-1 h-40">
-                        {weeklyData.dailyBreakdown.map((day, index) => {
+                        {weeklyData.dailyBreakdown.map((day) => {
                           const calorieHeight = (day.calories / 2500) * 100
-                          const isToday = index === 6
+                          const isToday = day.date === new Date().toISOString().slice(0, 10)
                           return (
-                            <div key={day.day} className="flex flex-col items-center space-y-2">
+                            <div key={day.key} className="flex flex-col items-center space-y-2">
                               <div className="flex-1 flex items-end">
                                 <div
                                   className={`w-full rounded-t-md transition-all duration-300 ${
@@ -465,6 +867,15 @@ export default function ReportsPage() {
             </div>
           </TabsContent>
         </Tabs>
+
+        <FeedbackButton onClick={() => setShowFeedback(true)} />
+        <FeedbackForm
+          open={showFeedback}
+          onOpenChange={setShowFeedback}
+          userEmail={user?.email || ''}
+          userName={user?.user_metadata?.full_name || 'Anonymous'}
+          userId={user?.id}
+        />
       </div>
     </div>
   )

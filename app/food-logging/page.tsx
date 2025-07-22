@@ -21,6 +21,9 @@ import { Flame, Drumstick, Sandwich, Droplet } from 'lucide-react'
 import { Loader2 } from 'lucide-react'
 import BarcodeTab from "@/components/food-logging/barcode-tab";
 import { Button } from '@/components/ui/button'
+import { toast, Toaster } from 'sonner'
+import { FeedbackButton } from "@/components/shared/feedback-button"
+import { FeedbackForm } from "@/components/shared/feedback-form"
 
 // Mock food database
 const mockFoodDatabase = [
@@ -118,6 +121,7 @@ export default function FoodLoggingPage() {
   const [waterToday, setWaterToday] = useState(0)
   const [photoLoading, setPhotoLoading] = useState(false)
   const [showShopItemsDialog, setShowShopItemsDialog] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false)
 
   const filteredFoods = mockFoodDatabase.filter((food) =>
     food.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -139,7 +143,6 @@ export default function FoodLoggingPage() {
 
   // Add water to summary object
   summary.water = waterToday
-
   // Smart Gemini-powered search (show suggestions even if local match is partial)
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -349,7 +352,12 @@ export default function FoodLoggingPage() {
         carbs: food.carbs ? Math.round(food.carbs * (quantity / 100) * 10) / 10 : null,
         fats: food.fats ? Math.round(food.fats * (quantity / 100) * 10) / 10 : null,
       })
+
       if (!error) {
+        toast.success('Food logged successfully! 🍽️', {
+          description: `Added ${quantity}${food.per.replace(/\d+/g, '')} of ${food.name}`,
+          duration: 3000,
+        })
         setShowFoodDialog(false)
         setFoodDialogData(null)
         // Refetch logs
@@ -379,7 +387,9 @@ export default function FoodLoggingPage() {
           setLoggedMeals(meals)
         }
       } else {
-        alert('Failed to save food log.')
+        toast.error('Failed to log food', {
+          description: 'Please try again',
+        })
       }
     }
   }
@@ -436,34 +446,52 @@ export default function FoodLoggingPage() {
     if (!user) return
     const today = new Date().toISOString().slice(0, 10)
 
-    // Check if entry exists for this user and date
-    const { data: existing, error: fetchError } = await supabase
-      .from('water_logs')
-      .select('*')
-      .eq('user_id', user.id) // user.id should match user_profiles.user_id
-      .eq('date', today)
-      .single()
-
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      alert('Failed to log water.')
-      return
-    }
-
-    if (existing) {
-      // Update the amount
-      const { error } = await supabase
+    try {
+      const { data: existing, error: fetchError } = await supabase
         .from('water_logs')
-        .update({ amount: existing.amount + amount })
-        .eq('id', existing.id)
-      if (!error) fetchWaterToday()
-    } else {
-      // Insert new entry
-      const { error } = await supabase.from('water_logs').insert({
-        user_id: user.id,
-        date: today,
-        amount,
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('date', today)
+        .single()
+
+      if (fetchError && fetchError.code !== 'PGRST116') {
+        toast.error('Failed to log water', {
+          description: 'Please try again',
+        })
+        return
+      }
+
+      if (existing) {
+        const { error } = await supabase
+          .from('water_logs')
+          .update({ amount: existing.amount + amount })
+          .eq('id', existing.id)
+
+        if (!error) {
+          toast.success('Water logged successfully! 💧', {
+            description: `Added ${amount}ml of water`,
+            duration: 3000,
+          })
+          fetchWaterToday()
+        }
+      } else {
+        const { error } = await supabase.from('water_logs').insert({
+          user_id: user.id,
+          date: today,
+          amount,
+        })
+        if (!error) {
+          toast.success('Water logged successfully! 💧', {
+            description: `Added ${amount}ml of water`,
+            duration: 3000,
+          })
+          fetchWaterToday()
+        }
+      }
+    } catch (error) {
+      toast.error('Failed to log water', {
+        description: 'Please try again',
       })
-      if (!error) fetchWaterToday()
     }
   }
 
@@ -486,33 +514,43 @@ export default function FoodLoggingPage() {
   const deleteMealItem = (mealId: number, itemIndex: number, logId?: string): void => {
     (async () => {
       if (!logId) return
-      await supabase.from('food_logs').delete().eq('id', logId)
-      // Refetch logs
-      if (user) {
-        const today = new Date().toISOString().slice(0, 10)
-        const { data } = await supabase
-          .from('food_logs')
-          .select('*')
-          .eq('user_id', user.id)
-          .eq('date', today)
-          .order('created_at', { ascending: true })
-        if (data) {
-          const meals = ['breakfast', 'lunch', 'dinner', 'snack'].map((meal) => ({
-            name: meal.charAt(0).toUpperCase() + meal.slice(1),
-            id: meal,
-            items: data.filter((item) => item.meal_type === meal).map((item) => ({
-              food: item.food_name,
-              quantity: item.quantity,
-              calories: item.calories,
-              protein: item.protein,
-              carbs: item.carbs ?? 0,   // <-- add this line
-              fats: item.fats ?? 0,     // <-- add this line
-              logId: item.id,
-            })),
-            totalCalories: data.filter((item) => item.meal_type === meal).reduce((sum, item) => sum + (item.calories || 0), 0),
-            time: '',
-          }))
-          setLoggedMeals(meals)
+      const { error } = await supabase.from('food_logs').delete().eq('id', logId)
+
+      if (error) {
+        toast.error('Failed to delete food item', {
+          description: 'Please try again',
+        })
+      } else {
+        toast.success('Food item deleted! 🗑️', {
+          duration: 2000,
+        })
+        // Refetch logs
+        if (user) {
+          const today = new Date().toISOString().slice(0, 10)
+          const { data } = await supabase
+            .from('food_logs')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('date', today)
+            .order('created_at', { ascending: true })
+          if (data) {
+            const meals = ['breakfast', 'lunch', 'dinner', 'snack'].map((meal) => ({
+              name: meal.charAt(0).toUpperCase() + meal.slice(1),
+              id: meal,
+              items: data.filter((item) => item.meal_type === meal).map((item) => ({
+                food: item.food_name,
+                quantity: item.quantity,
+                calories: item.calories,
+                protein: item.protein,
+                carbs: item.carbs ?? 0,   // <-- add this line
+                fats: item.fats ?? 0,     // <-- add this line
+                logId: item.id,
+              })),
+              totalCalories: data.filter((item) => item.meal_type === meal).reduce((sum, item) => sum + (item.calories || 0), 0),
+              time: '',
+            }))
+            setLoggedMeals(meals)
+          }
         }
       }
     })();
@@ -564,150 +602,196 @@ export default function FoodLoggingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 pb-24">
-      <div className="px-4 py-6 space-y-6">
-        {/* Summary Card */}
-        <Card className="shadow-xl border-0 bg-gradient-to-r from-emerald-100 to-blue-100 mb-2">
-          <CardContent className="flex justify-between items-center py-4">
-            <div className="flex flex-col items-center flex-1">
-              <Flame className="w-6 h-6 text-orange-500 mb-1" />
-              <span className="font-bold text-lg text-gray-900">{summary.calories}</span>
-              <span className="text-xs text-gray-600">Calories</span>
-            </div>
-            <div className="flex flex-col items-center flex-1">
-              <Drumstick className="w-6 h-6 text-emerald-600 mb-1" />
-              <span className="font-bold text-lg text-gray-900">{summary.protein}</span>
-              <span className="text-xs text-gray-600">Protein (g)</span>
-            </div>
-            <div className="flex flex-col items-center flex-1">
-              <Sandwich className="w-6 h-6 text-yellow-600 mb-1" />
-              <span className="font-bold text-lg text-gray-900">{summary.carbs}</span>
-              <span className="text-xs text-gray-600">Carbs (g)</span>
-            </div>
-            <div className="flex flex-col items-center flex-1">
-              <Droplet className="w-6 h-6 text-blue-500 mb-1" />
-              <span className="font-bold text-lg text-gray-900">{summary.fats}</span>
-              <span className="text-xs text-gray-600">Fats (g)</span>
-            </div>
-            <div className="flex flex-col items-center flex-1">
-              <Droplet className="w-6 h-6 text-cyan-500 mb-1" />
-              <span className="font-bold text-lg text-gray-900">{summary.water}</span>
-              <span className="text-xs text-gray-600">Water (ml)</span>
-            </div>
-          </CardContent>
-        </Card>
-        {/* Header */}
-        <FoodLoggingHeader />
+    <>
+      {/* Add Toaster component at root */}
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          style: {
+            background: 'white',
+            color: '#374151',
+            border: '1px solid #E5E7EB',
+          },
+          className: 'shadow-lg',
+        }}
+      />
 
-        {/* Quick Popular Foods */}
-        <PopularFoods
-          popularFoods={popularFoods}
-          onFoodSelect={(food) => openFoodDialog({
-            ...food,
-            per: food.per || "100g", // Ensure 'per' is always present
-            carbs: food.carbs ?? 0,
-            fats: food.fats ?? 0,
-          })}
-        />
-        {/* Shop/Street Food Add Button */}
-        <Button
-          className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 rounded shadow mb-2"
-          onClick={() => setShowShopItemsDialog(true)}
-        >
-          Add Shop/Street Food
-        </Button>
-        <ShopItemsDialog
-          open={showShopItemsDialog}
-          onOpenChange={setShowShopItemsDialog}
-          onSubmit={handleShopItemSubmit}
-        />
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 pb-24">
+        <div className="px-4 py-6 space-y-6">
+          {/* Summary Card */}
+          <Card className="shadow-xl border-0 bg-gradient-to-r from-emerald-100 to-blue-100">
+            <CardContent className="p-2 sm:p-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:flex md:justify-between gap-2 sm:gap-4">
+                {/* Calories */}
+                <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm">
+                  <Flame className="w-5 h-5 sm:w-6 sm:h-6 text-orange-500 mb-0.5 sm:mb-1" />
+                  <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
+                    {summary.calories}
+                  </span>
+                  <span className="text-[10px] sm:text-xs text-gray-600">Calories</span>
+                </div>
 
-        {/* Manual Food Entry */}
-        <QuickAdd
-          customFoodName={customFoodName}
-          onCustomFoodNameChange={setCustomFoodName}
-          onCustomFoodSubmit={handleCustomFood}
-          onShowCustomDialog={() => setShowCustomFoodDialog(true)}
-        />
+                {/* Protein */}
+                <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm">
+                  <Drumstick className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600 mb-0.5 sm:mb-1" />
+                  <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
+                    {summary.protein}
+                  </span>
+                  <span className="text-[10px] sm:text-xs text-gray-600">Protein</span>
+                </div>
 
-        {/* Food Input Methods */}
-        <Tabs defaultValue="search" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-4 bg-white/90 backdrop-blur-sm">
-            <TabsTrigger value="search">Search</TabsTrigger>
-            <TabsTrigger value="photo">Photo</TabsTrigger>
-            <TabsTrigger value="barcode">Barcode</TabsTrigger>
-            <TabsTrigger value="voice">Voice</TabsTrigger>
-          </TabsList>
+                {/* Carbs */}
+                <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm">
+                  <Sandwich className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600 mb-0.5 sm:mb-1" />
+                  <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
+                    {summary.carbs}
+                  </span>
+                  <span className="text-[10px] sm:text-xs text-gray-600">Carbs</span>
+                </div>
 
-          {/* Search Tab */}
-          <TabsContent value="search">
-            <SearchTab
-              searchQuery={searchQuery}
-              onSearchQueryChange={setSearchQuery}
-              filteredFoods={filteredFoods.length > 0 ? filteredFoods : geminiSuggestions}
-              onFoodSelect={openFoodDialog}
-              geminiLoading={geminiLoading}
-            />
-          </TabsContent>
+                {/* Fats */}
+                <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm">
+                  <Droplet className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500 mb-0.5 sm:mb-1" />
+                  <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
+                    {summary.fats}
+                  </span>
+                  <span className="text-[10px] sm:text-xs text-gray-600">Fats</span>
+                </div>
 
-          {/* Photo Tab */}
-          <TabsContent value="photo">
-            <PhotoTab
-              selectedImage={selectedImage}
-              onImageUpload={handleImageUpload}
-              onAddPhoto={handlePhotoAnalyze}
-              loading={photoLoading}
-            />
-          </TabsContent>
+                {/* Water */}
+                <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm col-span-2 sm:col-span-1">
+                  <Droplet className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-500 mb-0.5 sm:mb-1" />
+                  <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
+                    {summary.water}
+                  </span>
+                  <span className="text-[10px] sm:text-xs text-gray-600">Water</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          {/* Header */}
+          <FoodLoggingHeader />
 
-          {/* Barcode Tab */}
-          <TabsContent value="barcode">
-            <BarcodeTab onFoodSelect={openFoodDialog} />
-          </TabsContent>
+          {/* Quick Popular Foods */}
+          <PopularFoods
+            popularFoods={popularFoods}
+            onFoodSelect={(food) => openFoodDialog({
+              ...food,
+              per: food.per || "100g", // Ensure 'per' is always present
+              carbs: food.carbs ?? 0,
+              fats: food.fats ?? 0,
+            })}
+          />
+          {/* Shop/Street Food Add Button */}
+          <Button
+            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 rounded shadow mb-2"
+            onClick={() => setShowShopItemsDialog(true)}
+          >
+            Add Shop/Street Food
+          </Button>
+          <ShopItemsDialog
+            open={showShopItemsDialog}
+            onOpenChange={setShowShopItemsDialog}
+            onSubmit={handleShopItemSubmit}
+          />
 
-          {/* Voice Tab */}
-          <TabsContent value="voice">
-            <VoiceTab
-              isListening={isListening}
-              isLoading={isVoiceLoading}
-              onStart={handleVoiceStart}
-              onStop={handleVoiceStop}
-            />
-          </TabsContent>
-        </Tabs>
+          {/* Manual Food Entry */}
+          <QuickAdd
+            customFoodName={customFoodName}
+            onCustomFoodNameChange={setCustomFoodName}
+            onCustomFoodSubmit={handleCustomFood}
+            onShowCustomDialog={() => setShowCustomFoodDialog(true)}
+          />
 
-        {/* Today's Meals */}
-        <TodaysMeals
-          loggedMeals={loggedMeals}
-          onDeleteMealItem={(mealId, itemIndex, logId) => deleteMealItem(mealId, itemIndex, logId)}
-          onShowCustomDialog={() => setShowCustomFoodDialog(true)}
-        />
+          {/* Food Input Methods */}
+          <Tabs defaultValue="search" className="space-y-4">
+            <TabsList className="grid w-full grid-cols-4 bg-white/90 backdrop-blur-sm">
+              <TabsTrigger value="search">Search</TabsTrigger>
+              <TabsTrigger value="photo">Photo</TabsTrigger>
+              <TabsTrigger value="barcode">Barcode</TabsTrigger>
+              <TabsTrigger value="voice">Voice</TabsTrigger>
+            </TabsList>
 
-        {/* Quick Add Water */}
-        <WaterTracker onAddWater={addWater} />
+            {/* Search Tab */}
+            <TabsContent value="search">
+              <SearchTab
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+                filteredFoods={filteredFoods.length > 0 ? filteredFoods : geminiSuggestions}
+                onFoodSelect={openFoodDialog}
+                geminiLoading={geminiLoading}
+              />
+            </TabsContent>
 
-        {/* Food Confirmation Dialog */}
-        <FoodDialog
-          open={showFoodDialog}
-          onOpenChange={handleFoodDialogOpenChange}
-          foodDialogData={foodDialogData}
-          onFoodDialogDataChange={setFoodDialogData}
-          onAddFood={handleAddFood}
-        />
+            {/* Photo Tab */}
+            <TabsContent value="photo">
+              <PhotoTab
+                selectedImage={selectedImage}
+                onImageUpload={handleImageUpload}
+                onAddPhoto={handlePhotoAnalyze}
+                loading={photoLoading}
+              />
+            </TabsContent>
 
-        {/* Custom Food Dialog */}
-        <CustomFoodDialog
-          open={showCustomFoodDialog}
-          onOpenChange={setShowCustomFoodDialog}
-          customFoodName={customFoodName}
-          onCustomFoodNameChange={setCustomFoodName}
-          customFoodQuantity={customFoodQuantity}
-          onCustomFoodQuantityChange={setCustomFoodQuantity}
-          customFoodUnit={customFoodUnit}
-          onCustomFoodUnitChange={setCustomFoodUnit}
-          onSubmit={handleCustomFood}
-        />
+            {/* Barcode Tab */}
+            <TabsContent value="barcode">
+              <BarcodeTab onFoodSelect={openFoodDialog} />
+            </TabsContent>
+
+            {/* Voice Tab */}
+            <TabsContent value="voice">
+              <VoiceTab
+                isListening={isListening}
+                isLoading={isVoiceLoading}
+                onStart={handleVoiceStart}
+                onStop={handleVoiceStop}
+              />
+            </TabsContent>
+          </Tabs>
+
+          {/* Today's Meals */}
+          <TodaysMeals
+            loggedMeals={loggedMeals}
+            onDeleteMealItem={(mealId, itemIndex, logId) => deleteMealItem(mealId, itemIndex, logId)}
+            onShowCustomDialog={() => setShowCustomFoodDialog(true)}
+          />
+
+          {/* Quick Add Water */}
+          <WaterTracker onAddWater={addWater} />
+
+          {/* Food Confirmation Dialog */}
+          <FoodDialog
+            open={showFoodDialog}
+            onOpenChange={handleFoodDialogOpenChange}
+            foodDialogData={foodDialogData}
+            onFoodDialogDataChange={setFoodDialogData}
+            onAddFood={handleAddFood}
+          />
+
+          {/* Custom Food Dialog */}
+          <CustomFoodDialog
+            open={showCustomFoodDialog}
+            onOpenChange={setShowCustomFoodDialog}
+            customFoodName={customFoodName}
+            onCustomFoodNameChange={setCustomFoodName}
+            customFoodQuantity={customFoodQuantity}
+            onCustomFoodQuantityChange={setCustomFoodQuantity}
+            customFoodUnit={customFoodUnit}
+            onCustomFoodUnitChange={setCustomFoodUnit}
+            onSubmit={handleCustomFood}
+          />
+
+          {/* Feedback Button and Form */}
+          <FeedbackButton onClick={() => setShowFeedback(true)} />
+          <FeedbackForm
+            open={showFeedback}
+            onOpenChange={setShowFeedback}
+            userEmail={user?.email || ''}
+            userName={user?.user_metadata?.full_name || 'Anonymous'}
+            userId={user?.id}
+          />
+        </div>
       </div>
-    </div>
+    </>
   )
 }

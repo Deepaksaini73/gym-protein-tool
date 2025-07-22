@@ -19,6 +19,12 @@ interface PersonalInfoProps {
 }
 
 export function PersonalInfo({ profile, isEditing, onProfileChange }: PersonalInfoProps) {
+  // Helper function to handle empty/null values
+  const handleNumberInput = (value: string, field: keyof UserProfile) => {
+    const numberValue = value === '' ? 0 : Number(value)
+    onProfileChange({ ...profile, [field]: numberValue })
+  }
+
   return (
     <Card className="shadow-lg border-0 bg-white/80 backdrop-blur-sm">
       <CardHeader>
@@ -52,10 +58,11 @@ export function PersonalInfo({ profile, isEditing, onProfileChange }: PersonalIn
               <label className="text-sm font-medium text-gray-700">Age</label>
               <Input
                 type="number"
-                value={profile.age}
-                onChange={(e) => onProfileChange({ ...profile, age: Number.parseInt(e.target.value) })}
+                value={profile.age || ''}
+                onChange={(e) => handleNumberInput(e.target.value, 'age')}
                 disabled={!isEditing}
                 className="border-2 focus:border-emerald-300"
+                min="0"
               />
             </div>
             <div>
@@ -81,20 +88,22 @@ export function PersonalInfo({ profile, isEditing, onProfileChange }: PersonalIn
               <label className="text-sm font-medium text-gray-700">Height (cm)</label>
               <Input
                 type="number"
-                value={profile.height}
-                onChange={(e) => onProfileChange({ ...profile, height: Number.parseInt(e.target.value) })}
+                value={profile.height || ''}
+                onChange={(e) => handleNumberInput(e.target.value, 'height')}
                 disabled={!isEditing}
                 className="border-2 focus:border-emerald-300"
+                min="0"
               />
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700">Weight (kg)</label>
               <Input
                 type="number"
-                value={profile.currentWeight}
-                onChange={(e) => onProfileChange({ ...profile, currentWeight: Number.parseInt(e.target.value) })}
+                value={profile.currentWeight || ''}
+                onChange={(e) => handleNumberInput(e.target.value, 'currentWeight')}
                 disabled={!isEditing}
                 className="border-2 focus:border-emerald-300"
+                min="0"
               />
             </div>
           </div>
@@ -102,4 +111,4 @@ export function PersonalInfo({ profile, isEditing, onProfileChange }: PersonalIn
       </CardContent>
     </Card>
   )
-} 
+}
