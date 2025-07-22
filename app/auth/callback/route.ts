@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const code = requestUrl.searchParams.get('code')
   
   // Get site URL from environment variable
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || requestUrl.origin
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
 
   if (code) {
     const supabase = createRouteHandlerClient({ 
