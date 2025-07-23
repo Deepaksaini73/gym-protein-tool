@@ -6,8 +6,8 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
   
-  // Get site URL from environment variable
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+  // Get site URL from environment variable or request origin
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || requestUrl.origin
 
   if (code) {
     const supabase = createRouteHandlerClient({ 
@@ -24,6 +24,6 @@ export async function GET(request: Request) {
     await supabase.auth.exchangeCodeForSession(code)
   }
 
-  // Redirect to the site URL instead of request origin
-  return NextResponse.redirect(siteUrl)
+  // Redirect to home page using site URL
+  return NextResponse.redirect(`${siteUrl}/`)
 }
