@@ -350,7 +350,16 @@ export default function FoodLoggingPage() {
   const handleAddFood = async () => {
     if (foodDialogData && user) {
       const { food, quantity, mealType } = foodDialogData
-      const today = new Date().toISOString().slice(0, 10)
+
+      const istDate = new Date().toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+      });
+      const [day, month, year] = istDate.split(",")[0].split("/");
+      const todayIST = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      console.log(todayIST);
+      const today = todayIST;
+      console.log("today date in add food time ",today)
+    
       const { error } = await supabase.from('food_logs').insert({
         user_id: user.id,
         date: today,
@@ -372,7 +381,7 @@ export default function FoodLoggingPage() {
         setShowFoodDialog(false)
         setFoodDialogData(null)
         // Refetch logs
-        const today = new Date().toISOString().slice(0, 10)
+        // const today = new Date().toISOString().slice(0, 10)
         const { data } = await supabase
           .from('food_logs')
           .select('*')
@@ -509,7 +518,13 @@ export default function FoodLoggingPage() {
   // Fetch today's water total
   const fetchWaterToday = async () => {
     if (!user) return
-    const today = new Date().toISOString().slice(0, 10)
+          const istDate = new Date().toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+      });
+      const [day, month, year] = istDate.split(",")[0].split("/");
+      const todayIST = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      console.log(todayIST);
+      const today = todayIST;
     const { data } = await supabase
       .from('water_logs')
       .select('amount')
@@ -537,7 +552,13 @@ export default function FoodLoggingPage() {
         })
         // Refetch logs
         if (user) {
-          const today = new Date().toISOString().slice(0, 10)
+                const istDate = new Date().toLocaleString("en-IN", {
+              timeZone: "Asia/Kolkata",
+            });
+            const [day, month, year] = istDate.split(",")[0].split("/");
+            const todayIST = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+            console.log(todayIST);
+            const today = todayIST;
           const { data } = await supabase
             .from('food_logs')
             .select('*')
@@ -569,8 +590,14 @@ export default function FoodLoggingPage() {
 
   const fetchTodaysMeals = async () => {
     if (!user) return
-    const today = new Date().toISOString().slice(0, 10)
-    const { data } = await supabase
+          const istDate = new Date().toLocaleString("en-IN", {
+            timeZone: "Asia/Kolkata",
+          });
+          const [day, month, year] = istDate.split(",")[0].split("/");
+          const todayIST = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+          console.log(todayIST);
+          const today = todayIST;
+        const { data } = await supabase
       .from('food_logs')
       .select('*')
       .eq('user_id', user.id)

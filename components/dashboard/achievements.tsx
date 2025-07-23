@@ -31,7 +31,7 @@ export function Achievements({ achievements }: AchievementsProps) {
                   <span className="text-lg">{achievement.icon}</span>
                   <span className="text-sm font-medium text-gray-900">{achievement.name}</span>
                 </div>
-                <span className="text-sm text-gray-600">{achievement.progress}%</span>
+                <span className="text-sm text-gray-600">{achievement.progress.toFixed(2)}%</span>
               </div>
               <Progress
                 value={achievement.progress}
