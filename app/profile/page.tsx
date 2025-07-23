@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useAuth } from "@/contexts/auth-context"
+import { supabase } from '@/lib/supabase'
 import { NutritionGoals } from "@/components/profile/nutrition-goals"
 import {
   ProfileHeader,
@@ -70,7 +71,12 @@ export default function ProfilePage() {
         const [profileData, streaksData, achievementsData] = await Promise.all([
           getUserProfile(user.id),
           getUserStreaks(user.id),
-          getUserAchievements(user.id)
+          // Fetch only earned achievements from database
+          supabase
+            .from('user_achievements')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('earned_at', { ascending: false })
         ])
 
         if (profileData) {
@@ -84,7 +90,8 @@ export default function ProfilePage() {
           setStreakData(streaksData)
         }
 
-        setUserAchievements(achievementsData || [])
+        // Set only earned achievements
+        setUserAchievements(achievementsData.data || [])
 
       } catch (error) {
         console.error('Error loading user data:', error)
@@ -350,9 +357,11 @@ export default function ProfilePage() {
 
           {/* Achievements */}
           <Achievements 
-            achievements={AVAILABLE_ACHIEVEMENTS.map(ach => ({
-              ...ach,
-              earned: userAchievements.some(ua => ua.achievement_name === ach.name)
+            achievements={userAchievements.map(achievement => ({
+              name: achievement.achievement_name,
+              icon: achievement.achievement_icon,
+              earned: true,
+              earnedAt: achievement.earned_at
             }))}
             isLoading={isStatsLoading}
           />
@@ -373,4 +382,15 @@ export default function ProfilePage() {
       />
     </div>
   )
+}
+
+// Add description helper function
+const getAchievementDescription = (id: string) => {
+  const descriptions = {
+    'first_week': 'Log meals for 7 consecutive days',
+    'protein_champ': 'Meet protein goals for 5 days',
+    'hydration_hero': 'Meet water intake goals for 5 days',
+    'meal_master': 'Log 50 meals total'
+  }
+  return descriptions[id as keyof typeof descriptions] || ''
 }

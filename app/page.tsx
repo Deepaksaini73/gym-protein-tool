@@ -280,92 +280,113 @@ export default function DashboardPage() {
 
       // Calculate achievements
       const calculateAchievements = async () => {
-        const achievements = [];
-        
-        // First Log Achievement
-        const hasLogs = foodLogs.length > 0;
-        achievements.push({
-          name: ACHIEVEMENTS.FIRST_LOG.name,
-          icon: ACHIEVEMENTS.FIRST_LOG.icon,
-          earned: hasLogs,
-          progress: hasLogs ? 100 : 0
-        });
-
-        // Streak Achievements
-        const currentStreak = streak;
-        achievements.push({
-          name: ACHIEVEMENTS.STREAK_3.name,
-          icon: ACHIEVEMENTS.STREAK_3.icon,
-          earned: currentStreak >= 3,
-          progress: Math.min(100, (currentStreak / 3) * 100)
-        });
-
-        achievements.push({
-          name: ACHIEVEMENTS.STREAK_7.name,
-          icon: ACHIEVEMENTS.STREAK_7.icon,
-          earned: currentStreak >= 7,
-          progress: Math.min(100, (currentStreak / 7) * 100)
-        });
-
-        // Water Goal Achievement
-        const waterGoalDays = filledWeekDays.filter(day => 
-          day.water >= (profileData?.daily_water_goal || 2000)
-        ).length;
-        achievements.push({
-          name: ACHIEVEMENTS.WATER_GOAL.name,
-          icon: ACHIEVEMENTS.WATER_GOAL.icon,
-          earned: waterGoalDays >= 5,
-          progress: Math.min(100, (waterGoalDays / 5) * 100)
-        });
-
-        // Protein Goal Achievement
-        const proteinGoalDays = filledWeekDays.filter(day =>
-          day.protein >= (profileData?.daily_protein_goal || 60)
-        ).length;
-        achievements.push({
-          name: ACHIEVEMENTS.PROTEIN_MASTER.name,
-          icon: ACHIEVEMENTS.PROTEIN_MASTER.icon,
-          earned: proteinGoalDays >= 5,
-          progress: Math.min(100, (proteinGoalDays / 5) * 100)
-        });
-
-        // Calorie Goal Achievement
-        const calorieGoalDays = filledWeekDays.filter(day => {
-          const target = profileData?.daily_calorie_goal || 2000;
-          return day.calories >= target * 0.9 && day.calories <= target * 1.1;
-        }).length;
-        achievements.push({
-          name: ACHIEVEMENTS.CALORIES_GOAL.name,
-          icon: ACHIEVEMENTS.CALORIES_GOAL.icon,
-          earned: calorieGoalDays >= 7,
-          progress: Math.min(100, (calorieGoalDays / 7) * 100)
-        });
-
-        // Get existing achievements from database
+        // Get earned achievements from database
         const { data: existingAchievements } = await supabase
           .from('user_achievements')
           .select('*')
-          .eq('user_id', user.id);
+          .eq('user_id', user.id)
+          .order('earned_at', { ascending: false });
 
-        // Update database with newly earned achievements
-        for (const achievement of achievements) {
-          if (achievement.earned) {
-            const exists = existingAchievements?.some(a => a.achievement_name === achievement.name);
-            if (!exists) {
-              await supabase.from('user_achievements').insert({
-                user_id: user.id,
-                achievement_name: achievement.name,
-                achievement_icon: achievement.icon,
-                earned_at: new Date().toISOString()
-              });
-
-              // Show toast for new achievement
-              toast.success(`🏆 Achievement Unlocked: ${achievement.name}!`);
-            }
+        // Define all available achievements with progress calculation
+        const allAchievements = [
+          {
+            name: "First Food Log",
+            icon: "🍽️",
+            description: "Log your first meal",
+            requirement: 1,
+            earned: existingAchievements?.some(a => a.achievement_name === "First Food Log") || false,
+            currentCount: Math.min(1, (logs || []).length),
+            progress: Math.min(100, ((logs || []).length > 0 ? 100 : 0))
+          },
+          {
+            name: "3 Day Streak",
+            icon: "🔥", 
+            description: "Maintain a 3 day logging streak",
+            requirement: 3,
+            earned: existingAchievements?.some(a => a.achievement_name === "3 Day Streak") || false,
+            currentCount: Math.min(3, currentStreak),
+            progress: Math.min(100, (currentStreak / 3) * 100)
+          },
+          {
+            name: "Weekly Warrior",
+            icon: "⚔️",
+            description: "Maintain a 7 day logging streak", 
+            requirement: 7,
+            earned: existingAchievements?.some(a => a.achievement_name === "Weekly Warrior") || false,
+            currentCount: Math.min(7, currentStreak),
+            progress: Math.min(100, (currentStreak / 7) * 100)
+          },
+          {
+            name: "Hydration Hero",
+            icon: "💧",
+            description: "Meet water goal for 5 days",
+            requirement: 5,
+            earned: existingAchievements?.some(a => a.achievement_name === "Hydration Hero") || false,
+            currentCount: Math.min(5, calculateWaterGoalDays()),
+            progress: Math.min(100, (calculateWaterGoalDays() / 5) * 100)
+          },
+          {
+            name: "Protein Perfect", 
+            icon: "💪",
+            description: "Meet protein goal for 5 days",
+            requirement: 5,
+            earned: existingAchievements?.some(a => a.achievement_name === "Protein Perfect") || false,
+            currentCount: Math.min(5, calculateProteinGoalDays()),
+            progress: Math.min(100, (calculateProteinGoalDays() / 5) * 100)
+          },
+          {
+            name: "Calorie Counter",
+            icon: "🎯", 
+            description: "Stay within calorie goal for 7 days",
+            requirement: 7,
+            earned: existingAchievements?.some(a => a.achievement_name === "Calorie Counter") || false,
+            currentCount: Math.min(7, calculateCalorieGoalDays()),
+            progress: Math.min(100, (calculateCalorieGoalDays() / 7) * 100)
           }
-        }
+        ];
 
-        setRealAchievements(achievements);
+        // Add earned dates for completed achievements
+        const achievementsWithDates = allAchievements.map(achievement => {
+          const earned = existingAchievements?.find(a => a.achievement_name === achievement.name);
+          return {
+            ...achievement,
+            earnedAt: earned?.earned_at
+          };
+        });
+
+        setRealAchievements(achievementsWithDates);
+      };
+
+      // Helper functions to calculate goal days
+      const calculateWaterGoalDays = () => {
+        const dates = [...new Set((water || []).map(log => log.date))];
+        return dates.filter(date => {
+          const dayTotal = (water || [])
+            .filter(log => log.date === date)
+            .reduce((sum, log) => sum + (log.amount || 0), 0);
+          return dayTotal >= (profileData?.daily_water_goal || 2000);
+        }).length;
+      };
+
+      const calculateProteinGoalDays = () => {
+        const dates = [...new Set((logs || []).map(log => log.date))];
+        return dates.filter(date => {
+          const dayTotal = (logs || [])
+            .filter(log => log.date === date)
+            .reduce((sum, log) => sum + (log.protein || 0), 0);
+          return dayTotal >= (profileData?.daily_protein_goal || 60);
+        }).length;
+      };
+
+      const calculateCalorieGoalDays = () => {
+        const dates = [...new Set((logs || []).map(log => log.date))];
+        return dates.filter(date => {
+          const dayTotal = (logs || [])
+            .filter(log => log.date === date)
+            .reduce((sum, log) => sum + (log.calories || 0), 0);
+          const target = profileData?.daily_calorie_goal || 2000;
+          return dayTotal >= target * 0.9 && dayTotal <= target * 1.1;
+        }).length;
       };
 
       await calculateAchievements();
