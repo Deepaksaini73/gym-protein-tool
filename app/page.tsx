@@ -22,6 +22,8 @@ import { Toaster } from "sonner"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { useRouter } from 'next/navigation' // Changed from 'next/router'
+import { ACHIEVEMENTS } from "@/lib/achievements"
+
 
 
 export default function DashboardPage() {
@@ -276,6 +278,98 @@ export default function DashboardPage() {
         setWeeklyGoalsMet(goalsMetCount);
       }
 
+      // Calculate achievements
+      const calculateAchievements = async () => {
+        const achievements = [];
+        
+        // First Log Achievement
+        const hasLogs = foodLogs.length > 0;
+        achievements.push({
+          name: ACHIEVEMENTS.FIRST_LOG.name,
+          icon: ACHIEVEMENTS.FIRST_LOG.icon,
+          earned: hasLogs,
+          progress: hasLogs ? 100 : 0
+        });
+
+        // Streak Achievements
+        const currentStreak = streak;
+        achievements.push({
+          name: ACHIEVEMENTS.STREAK_3.name,
+          icon: ACHIEVEMENTS.STREAK_3.icon,
+          earned: currentStreak >= 3,
+          progress: Math.min(100, (currentStreak / 3) * 100)
+        });
+
+        achievements.push({
+          name: ACHIEVEMENTS.STREAK_7.name,
+          icon: ACHIEVEMENTS.STREAK_7.icon,
+          earned: currentStreak >= 7,
+          progress: Math.min(100, (currentStreak / 7) * 100)
+        });
+
+        // Water Goal Achievement
+        const waterGoalDays = filledWeekDays.filter(day => 
+          day.water >= (profileData?.daily_water_goal || 2000)
+        ).length;
+        achievements.push({
+          name: ACHIEVEMENTS.WATER_GOAL.name,
+          icon: ACHIEVEMENTS.WATER_GOAL.icon,
+          earned: waterGoalDays >= 5,
+          progress: Math.min(100, (waterGoalDays / 5) * 100)
+        });
+
+        // Protein Goal Achievement
+        const proteinGoalDays = filledWeekDays.filter(day =>
+          day.protein >= (profileData?.daily_protein_goal || 60)
+        ).length;
+        achievements.push({
+          name: ACHIEVEMENTS.PROTEIN_MASTER.name,
+          icon: ACHIEVEMENTS.PROTEIN_MASTER.icon,
+          earned: proteinGoalDays >= 5,
+          progress: Math.min(100, (proteinGoalDays / 5) * 100)
+        });
+
+        // Calorie Goal Achievement
+        const calorieGoalDays = filledWeekDays.filter(day => {
+          const target = profileData?.daily_calorie_goal || 2000;
+          return day.calories >= target * 0.9 && day.calories <= target * 1.1;
+        }).length;
+        achievements.push({
+          name: ACHIEVEMENTS.CALORIES_GOAL.name,
+          icon: ACHIEVEMENTS.CALORIES_GOAL.icon,
+          earned: calorieGoalDays >= 7,
+          progress: Math.min(100, (calorieGoalDays / 7) * 100)
+        });
+
+        // Get existing achievements from database
+        const { data: existingAchievements } = await supabase
+          .from('user_achievements')
+          .select('*')
+          .eq('user_id', user.id);
+
+        // Update database with newly earned achievements
+        for (const achievement of achievements) {
+          if (achievement.earned) {
+            const exists = existingAchievements?.some(a => a.achievement_name === achievement.name);
+            if (!exists) {
+              await supabase.from('user_achievements').insert({
+                user_id: user.id,
+                achievement_name: achievement.name,
+                achievement_icon: achievement.icon,
+                earned_at: new Date().toISOString()
+              });
+
+              // Show toast for new achievement
+              toast.success(`🏆 Achievement Unlocked: ${achievement.name}!`);
+            }
+          }
+        }
+
+        setRealAchievements(achievements);
+      };
+
+      await calculateAchievements();
+
     } catch (error) {
       console.error('Error fetching data:', error);
       setNeedsProfile(true);
@@ -353,6 +447,7 @@ export default function DashboardPage() {
       setRefreshTrigger(prev => prev + 1)
     }
   }, [])
+
 
   if (loading) {
     return (
