@@ -464,7 +464,13 @@ export default function FoodLoggingPage() {
   // Insert or update water log for today
   const addWater = async (amount: number) => {
     if (!user) return
-    const today = new Date().toISOString().slice(0, 10)
+     const istDate = new Date().toLocaleString("en-IN", {
+        timeZone: "Asia/Kolkata",
+      });
+      const [day, month, year] = istDate.split(",")[0].split("/");
+      const todayIST = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      console.log(todayIST);
+      const today = todayIST;
 
     try {
       const { data: existing, error: fetchError } = await supabase
