@@ -17,7 +17,9 @@ export function QuickStats({ totalMeals, avgCalories, bestStreak }: QuickStatsPr
       </Card>
       <Card className="shadow-lg border-0 bg-gradient-to-br from-blue-50 to-blue-100 border-2 border-blue-200">
         <CardContent className="p-4 text-center">
-          <div className="text-xl font-bold text-blue-700">{avgCalories}</div>
+          <div className="text-xl font-bold text-blue-700">
+            {avgCalories.toFixed(2)}
+          </div>
           <p className="text-xs text-blue-600">Avg Calories</p>
         </CardContent>
       </Card>
@@ -29,4 +31,4 @@ export function QuickStats({ totalMeals, avgCalories, bestStreak }: QuickStatsPr
       </Card>
     </div>
   )
-} 
+}

@@ -45,7 +45,10 @@ type ProfileUpdateData = {
 }
 
 export default function ProfilePage() {
-  const { user, loading } = useAuth()
+  // 1. Auth context hook
+  const { user, loading: authLoading } = useAuth()
+
+  // 2. All useState hooks grouped together
   const [profile, setProfile] = useState<UserProfileType | null>(null)
   const [editProfile, setEditProfile] = useState<UserProfileType | null>(null)
   const [isEditing, setIsEditing] = useState(false)
@@ -56,11 +59,10 @@ export default function ProfilePage() {
   const [isStatsLoading, setIsStatsLoading] = useState(true)
   const [showFeedback, setShowFeedback] = useState(false)
 
+  // 3. useEffect hook
   useEffect(() => {
     const loadUserData = async () => {
       if (!user) return
-      
-      console.log('Starting data load...')
       setIsLoading(true)
       setIsStatsLoading(true)
 
@@ -70,10 +72,6 @@ export default function ProfilePage() {
           getUserStreaks(user.id),
           getUserAchievements(user.id)
         ])
-
-        console.log('Profile data:', profileData)
-        console.log('Streaks data:', streaksData)
-        console.log('Achievements data:', achievementsData)
 
         if (profileData) {
           setProfile(profileData)
@@ -94,50 +92,15 @@ export default function ProfilePage() {
       } finally {
         setIsLoading(false)
         setIsStatsLoading(false)
-        console.log('Data load complete')
       }
     }
 
-    if (user && !loading) {
+    if (user) {
       loadUserData()
     }
-  }, [user, loading])
+  }, [user])
 
-  // Simplify loading check
-  if (loading || isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading profile...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // Move profile check after loading check
-  if (!profile && !showSetup) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading profile data...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Please Sign In</h1>
-          <p className="text-gray-600">You need to be signed in to view your profile.</p>
-        </div>
-      </div>
-    )
-  }
-
+  // 4. Handler functions
   const handleProfileUpdate = async (updateData: ProfileUpdateData) => {
     if (!user) return
 
@@ -208,6 +171,40 @@ export default function ProfilePage() {
     }
   }
 
+  // 5. Conditional renders after all hooks
+  if (authLoading || isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading profile...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Please Sign In</h1>
+          <p className="text-gray-600">You need to be signed in to view your profile.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!profile && !showSetup) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading profile data...</p>
+        </div>
+      </div>
+    )
+  }
+
   if (showSetup) {
     return (
       <ProfileSetup
@@ -219,6 +216,7 @@ export default function ProfilePage() {
     )
   }
 
+  // 6. Main render
   return (
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 pb-24">
       <div className="px-4 py-6 space-y-6">

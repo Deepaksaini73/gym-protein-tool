@@ -16,14 +16,24 @@ import {
 } from "@/components/food-logging"
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/auth-context'
-import { Card, CardContent } from '@/components/ui/card'
-import { Flame, Drumstick, Sandwich, Droplet } from 'lucide-react'
-import { Loader2 } from 'lucide-react'
+import { Card, CardContent , CardHeader, CardTitle} from '@/components/ui/card'
 import BarcodeTab from "@/components/food-logging/barcode-tab";
 import { Button } from '@/components/ui/button'
 import { toast, Toaster } from 'sonner'
 import { FeedbackButton } from "@/components/shared/feedback-button"
 import { FeedbackForm } from "@/components/shared/feedback-form"
+import { 
+  Flame, 
+  Drumstick, 
+  Sandwich, 
+  Droplet,
+  Camera,
+  Mic,
+  Barcode,
+  UtensilsCrossed,
+  Loader2
+} from 'lucide-react'
+import { useRouter } from 'next/navigation';
 
 // Mock food database
 const mockFoodDatabase = [
@@ -102,7 +112,8 @@ interface FoodDialogData {
 }
 
 export default function FoodLoggingPage() {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [barcodeInput, setBarcodeInput] = useState("")
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
@@ -131,10 +142,10 @@ export default function FoodLoggingPage() {
   const summary = loggedMeals.reduce(
     (acc, meal) => {
       meal.items.forEach((item: any) => {
-        acc.calories += item.calories || 0
-        acc.protein += item.protein || 0
-        acc.carbs += item.carbs || 0
-        acc.fats += item.fats || 0
+        acc.calories += Number((item.calories || 0).toFixed(2))
+        acc.protein += Number((item.protein || 0).toFixed(2))
+        acc.carbs += Number((item.carbs || 0).toFixed(2))
+        acc.fats += Number((item.fats || 0).toFixed(2))
       })
       return acc
     },
@@ -601,197 +612,277 @@ export default function FoodLoggingPage() {
     }
   }
 
-  return (
-    <>
-      {/* Add Toaster component at root */}
-      <Toaster
-        position="top-center"
-        toastOptions={{
-          style: {
-            background: 'white',
-            color: '#374151',
-            border: '1px solid #E5E7EB',
-          },
-          className: 'shadow-lg',
-        }}
-      />
-
+  // Check for authentication and profile
+  if (!user) {
+    return (
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 pb-24">
-        <div className="px-4 py-6 space-y-6">
-          {/* Summary Card */}
-          <Card className="shadow-xl border-0 bg-gradient-to-r from-emerald-100 to-blue-100">
-            <CardContent className="p-2 sm:p-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:flex md:justify-between gap-2 sm:gap-4">
-                {/* Calories */}
-                <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm">
-                  <Flame className="w-5 h-5 sm:w-6 sm:h-6 text-orange-500 mb-0.5 sm:mb-1" />
-                  <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
-                    {summary.calories}
-                  </span>
-                  <span className="text-[10px] sm:text-xs text-gray-600">Calories</span>
+        <div className="px-4 py-12 max-w-6xl mx-auto space-y-8">
+          <div className="text-center space-y-4">
+            <h1 className="text-4xl font-bold text-gray-900">Smart Food Logging</h1>
+            <p className="text-xl text-gray-600">Track your nutrition journey with advanced AI features</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Photo Recognition */}
+            <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-4 mb-4">
+                  <div className="p-3 bg-emerald-100 rounded-lg">
+                    <Camera className="w-6 h-6 text-emerald-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold">Photo Recognition</h3>
                 </div>
+                <p className="text-gray-600">Take a photo of your food and let AI identify and calculate nutrition info instantly</p>
+              </CardContent>
+            </Card>
 
-                {/* Protein */}
-                <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm">
-                  <Drumstick className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600 mb-0.5 sm:mb-1" />
-                  <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
-                    {summary.protein}
-                  </span>
-                  <span className="text-[10px] sm:text-xs text-gray-600">Protein</span>
+            {/* Voice Commands */}
+            <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-4 mb-4">
+                  <div className="p-3 bg-blue-100 rounded-lg">
+                    <Mic className="w-6 h-6 text-blue-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold">Voice Commands</h3>
                 </div>
+                <p className="text-gray-600">Simply speak what you ate and get instant nutrition breakdown</p>
+              </CardContent>
+            </Card>
 
-                {/* Carbs */}
-                <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm">
-                  <Sandwich className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600 mb-0.5 sm:mb-1" />
-                  <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
-                    {summary.carbs}
-                  </span>
-                  <span className="text-[10px] sm:text-xs text-gray-600">Carbs</span>
+            {/* Barcode Scanner */}
+            <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-4 mb-4">
+                  <div className="p-3 bg-purple-100 rounded-lg">
+                    <Barcode className="w-6 h-6 text-purple-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold">Barcode Scanner</h3>
                 </div>
+                <p className="text-gray-600">Scan product barcodes for quick and accurate nutrition data</p>
+              </CardContent>
+            </Card>
 
-                {/* Fats */}
-                <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm">
-                  <Droplet className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500 mb-0.5 sm:mb-1" />
-                  <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
-                    {summary.fats}
-                  </span>
-                  <span className="text-[10px] sm:text-xs text-gray-600">Fats</span>
+            {/* Indian Food Database */}
+            <Card className="shadow-lg border-0 bg-white/90 backdrop-blur-sm">
+              <CardContent className="p-6">
+                <div className="flex items-center space-x-4 mb-4">
+                  <div className="p-3 bg-orange-100 rounded-lg">
+                    <UtensilsCrossed className="w-6 h-6 text-orange-600" />
+                  </div>
+                  <h3 className="text-lg font-semibold">Indian Food Database</h3>
                 </div>
+                <p className="text-gray-600">Extensive database including local and street food options</p>
+              </CardContent>
+            </Card>
+          </div>
 
-                {/* Water */}
-                <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm col-span-2 sm:col-span-1">
-                  <Droplet className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-500 mb-0.5 sm:mb-1" />
-                  <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
-                    {summary.water}
-                  </span>
-                  <span className="text-[10px] sm:text-xs text-gray-600">Water</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          {/* Header */}
-          <FoodLoggingHeader />
-
-          {/* Quick Popular Foods */}
-          <PopularFoods
-            popularFoods={popularFoods}
-            onFoodSelect={(food) => openFoodDialog({
-              ...food,
-              per: food.per || "100g", // Ensure 'per' is always present
-              carbs: food.carbs ?? 0,
-              fats: food.fats ?? 0,
-            })}
-          />
-          {/* Shop/Street Food Add Button */}
-          <Button
-            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 rounded shadow mb-2"
-            onClick={() => setShowShopItemsDialog(true)}
-          >
-            Add Shop/Street Food
-          </Button>
-          <ShopItemsDialog
-            open={showShopItemsDialog}
-            onOpenChange={setShowShopItemsDialog}
-            onSubmit={handleShopItemSubmit}
-          />
-
-          {/* Manual Food Entry */}
-          <QuickAdd
-            customFoodName={customFoodName}
-            onCustomFoodNameChange={setCustomFoodName}
-            onCustomFoodSubmit={handleCustomFood}
-            onShowCustomDialog={() => setShowCustomFoodDialog(true)}
-          />
-
-          {/* Food Input Methods */}
-          <Tabs defaultValue="search" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4 bg-white/90 backdrop-blur-sm">
-              <TabsTrigger value="search">Search</TabsTrigger>
-              <TabsTrigger value="photo">Photo</TabsTrigger>
-              <TabsTrigger value="barcode">Barcode</TabsTrigger>
-              <TabsTrigger value="voice">Voice</TabsTrigger>
-            </TabsList>
-
-            {/* Search Tab */}
-            <TabsContent value="search">
-              <SearchTab
-                searchQuery={searchQuery}
-                onSearchQueryChange={setSearchQuery}
-                filteredFoods={filteredFoods.length > 0 ? filteredFoods : geminiSuggestions}
-                onFoodSelect={openFoodDialog}
-                geminiLoading={geminiLoading}
-              />
-            </TabsContent>
-
-            {/* Photo Tab */}
-            <TabsContent value="photo">
-              <PhotoTab
-                selectedImage={selectedImage}
-                onImageUpload={handleImageUpload}
-                onAddPhoto={handlePhotoAnalyze}
-                loading={photoLoading}
-              />
-            </TabsContent>
-
-            {/* Barcode Tab */}
-            <TabsContent value="barcode">
-              <BarcodeTab onFoodSelect={openFoodDialog} />
-            </TabsContent>
-
-            {/* Voice Tab */}
-            <TabsContent value="voice">
-              <VoiceTab
-                isListening={isListening}
-                isLoading={isVoiceLoading}
-                onStart={handleVoiceStart}
-                onStop={handleVoiceStop}
-              />
-            </TabsContent>
-          </Tabs>
-
-          {/* Today's Meals */}
-          <TodaysMeals
-            loggedMeals={loggedMeals}
-            onDeleteMealItem={(mealId, itemIndex, logId) => deleteMealItem(mealId, itemIndex, logId)}
-            onShowCustomDialog={() => setShowCustomFoodDialog(true)}
-          />
-
-          {/* Quick Add Water */}
-          <WaterTracker onAddWater={addWater} />
-
-          {/* Food Confirmation Dialog */}
-          <FoodDialog
-            open={showFoodDialog}
-            onOpenChange={handleFoodDialogOpenChange}
-            foodDialogData={foodDialogData}
-            onFoodDialogDataChange={setFoodDialogData}
-            onAddFood={handleAddFood}
-          />
-
-          {/* Custom Food Dialog */}
-          <CustomFoodDialog
-            open={showCustomFoodDialog}
-            onOpenChange={setShowCustomFoodDialog}
-            customFoodName={customFoodName}
-            onCustomFoodNameChange={setCustomFoodName}
-            customFoodQuantity={customFoodQuantity}
-            onCustomFoodQuantityChange={setCustomFoodQuantity}
-            customFoodUnit={customFoodUnit}
-            onCustomFoodUnitChange={setCustomFoodUnit}
-            onSubmit={handleCustomFood}
-          />
-
-          {/* Feedback Button and Form */}
-          <FeedbackButton onClick={() => setShowFeedback(true)} />
-          <FeedbackForm
-            open={showFeedback}
-            onOpenChange={setShowFeedback}
-            userEmail={user?.email || ''}
-            userName={user?.user_metadata?.full_name || 'Anonymous'}
-            userId={user?.id}
-          />
+          <div className="text-center pt-6">
+            <Button 
+              onClick={() => router.push('/')}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-3 rounded-lg shadow-lg"
+            >
+              Sign In to Get Started
+            </Button>
+            <p className="mt-4 text-sm text-gray-500">
+              Track your nutrition journey with our advanced features
+            </p>
+          </div>
         </div>
       </div>
+    )
+  }
+
+  return (
+    <>
+        {/* Add Toaster component at root */}
+        <Toaster
+          position="top-center"
+          toastOptions={{
+            style: {
+              background: 'white',
+              color: '#374151',
+              border: '1px solid #E5E7EB',
+            },
+            className: 'shadow-lg',
+          }}
+        />
+
+        <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 pb-24">
+          <div className="px-4 py-6 space-y-6">
+            {/* Summary Card */}
+            <Card className="shadow-xl border-0 bg-gradient-to-r from-emerald-100 to-blue-100">
+              <CardContent className="p-2 sm:p-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:flex md:justify-between gap-2 sm:gap-4">
+                  {/* Calories */}
+                  <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm">
+                    <Flame className="w-5 h-5 sm:w-6 sm:h-6 text-orange-500 mb-0.5 sm:mb-1" />
+                    <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
+                      {summary.calories.toFixed(2)}
+                    </span>
+                    <span className="text-[10px] sm:text-xs text-gray-600">Calories</span>
+                  </div>
+
+                  {/* Protein */}
+                  <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm">
+                    <Drumstick className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600 mb-0.5 sm:mb-1" />
+                    <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
+                      {summary.protein.toFixed(2)}
+                    </span>
+                    <span className="text-[10px] sm:text-xs text-gray-600">Protein</span>
+                  </div>
+
+                  {/* Carbs */}
+                  <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm">
+                    <Sandwich className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600 mb-0.5 sm:mb-1" />
+                    <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
+                      {summary.carbs.toFixed(2)}
+                    </span>
+                    <span className="text-[10px] sm:text-xs text-gray-600">Carbs</span>
+                  </div>
+
+                  {/* Fats */}
+                  <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm">
+                    <Droplet className="w-5 h-5 sm:w-6 sm:h-6 text-blue-500 mb-0.5 sm:mb-1" />
+                    <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
+                      {summary.fats.toFixed(2)}
+                    </span>
+                    <span className="text-[10px] sm:text-xs text-gray-600">Fats</span>
+                  </div>
+
+                  {/* Water */}
+                  <div className="flex flex-col items-center justify-center p-2 rounded-lg bg-white/50 backdrop-blur-sm col-span-2 sm:col-span-1">
+                    <Droplet className="w-5 h-5 sm:w-6 sm:h-6 text-cyan-500 mb-0.5 sm:mb-1" />
+                    <span className="font-bold text-base sm:text-lg text-gray-900 tabular-nums">
+                      {waterToday.toFixed(2)}
+                    </span>
+                    <span className="text-[10px] sm:text-xs text-gray-600">Water</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            {/* Header */}
+            <FoodLoggingHeader />
+
+            {/* Quick Popular Foods */}
+            <PopularFoods
+              popularFoods={popularFoods}
+              onFoodSelect={(food) => openFoodDialog({
+                ...food,
+                per: food.per || "100g", // Ensure 'per' is always present
+                carbs: food.carbs ?? 0,
+                fats: food.fats ?? 0,
+              })}
+            />
+            {/* Shop/Street Food Add Button */}
+            <Button
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 rounded shadow mb-2"
+              onClick={() => setShowShopItemsDialog(true)}
+            >
+              Add Shop/Street Food
+            </Button>
+            <ShopItemsDialog
+              open={showShopItemsDialog}
+              onOpenChange={setShowShopItemsDialog}
+              onSubmit={handleShopItemSubmit}
+            />
+
+            {/* Manual Food Entry */}
+            <QuickAdd
+              customFoodName={customFoodName}
+              onCustomFoodNameChange={setCustomFoodName}
+              onCustomFoodSubmit={handleCustomFood}
+              onShowCustomDialog={() => setShowCustomFoodDialog(true)}
+            />
+
+            {/* Food Input Methods */}
+            <Tabs defaultValue="search" className="space-y-4">
+              <TabsList className="grid w-full grid-cols-4 bg-white/90 backdrop-blur-sm">
+                <TabsTrigger value="search">Search</TabsTrigger>
+                <TabsTrigger value="photo">Photo</TabsTrigger>
+                <TabsTrigger value="barcode">Barcode</TabsTrigger>
+                <TabsTrigger value="voice">Voice</TabsTrigger>
+              </TabsList>
+
+              {/* Search Tab */}
+              <TabsContent value="search">
+                <SearchTab
+                  searchQuery={searchQuery}
+                  onSearchQueryChange={setSearchQuery}
+                  filteredFoods={filteredFoods.length > 0 ? filteredFoods : geminiSuggestions}
+                  onFoodSelect={openFoodDialog}
+                  geminiLoading={geminiLoading}
+                />
+              </TabsContent>
+
+              {/* Photo Tab */}
+              <TabsContent value="photo">
+                <PhotoTab
+                  selectedImage={selectedImage}
+                  onImageUpload={handleImageUpload}
+                  onAddPhoto={handlePhotoAnalyze}
+                  loading={photoLoading}
+                />
+              </TabsContent>
+
+              {/* Barcode Tab */}
+              <TabsContent value="barcode">
+                <BarcodeTab onFoodSelect={openFoodDialog} />
+              </TabsContent>
+
+              {/* Voice Tab */}
+              <TabsContent value="voice">
+                <VoiceTab
+                  isListening={isListening}
+                  isLoading={isVoiceLoading}
+                  onStart={handleVoiceStart}
+                  onStop={handleVoiceStop}
+                />
+              </TabsContent>
+            </Tabs>
+
+            {/* Today's Meals */}
+            <TodaysMeals
+              loggedMeals={loggedMeals}
+              onDeleteMealItem={(mealId, itemIndex, logId) => deleteMealItem(mealId, itemIndex, logId)}
+              onShowCustomDialog={() => setShowCustomFoodDialog(true)}
+            />
+
+            {/* Quick Add Water */}
+            <WaterTracker onAddWater={addWater} />
+
+            {/* Food Confirmation Dialog */}
+            <FoodDialog
+              open={showFoodDialog}
+              onOpenChange={handleFoodDialogOpenChange}
+              foodDialogData={foodDialogData}
+              onFoodDialogDataChange={setFoodDialogData}
+              onAddFood={handleAddFood}
+            />
+
+            {/* Custom Food Dialog */}
+            <CustomFoodDialog
+              open={showCustomFoodDialog}
+              onOpenChange={setShowCustomFoodDialog}
+              customFoodName={customFoodName}
+              onCustomFoodNameChange={setCustomFoodName}
+              customFoodQuantity={customFoodQuantity}
+              onCustomFoodQuantityChange={setCustomFoodQuantity}
+              customFoodUnit={customFoodUnit}
+              onCustomFoodUnitChange={setCustomFoodUnit}
+              onSubmit={handleCustomFood}
+            />
+
+            {/* Feedback Button and Form */}
+            <FeedbackButton onClick={() => setShowFeedback(true)} />
+            <FeedbackForm
+              open={showFeedback}
+              onOpenChange={setShowFeedback}
+              userEmail={user?.email || ''}
+              userName={user?.user_metadata?.full_name || 'Anonymous'}
+              userId={user?.id}
+            />
+          </div>
+        </div>
     </>
   )
 }

@@ -300,8 +300,8 @@ export function ProfileSetup({ userEmail, userName, onComplete, onSkip }: Profil
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 backdrop-blur-sm">
+    <div className="min-h-[100dvh] bg-gradient-to-br from-emerald-50 via-white to-blue-50 py-6 px-4 flex items-start justify-center overflow-y-auto pb-24 sm:pb-6 sm:items-center">
+      <Card className="w-full max-w-md shadow-xl border-0 bg-white/90 backdrop-blur-sm my-auto">
         <CardHeader className="text-center pb-4">
           <CardTitle className="text-2xl font-bold text-gray-900">Complete Your Profile</CardTitle>
           <p className="text-gray-600">Step {step} of {totalSteps}</p>
@@ -311,10 +311,10 @@ export function ProfileSetup({ userEmail, userName, onComplete, onSkip }: Profil
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-6 pb-6">
           {renderStep()}
 
-          <div className="flex space-x-3 pt-4">
+          <div className="flex space-x-3 pt-4 sticky bottom-0 bg-white/90 backdrop-blur-sm">
             {step > 1 && (
               <Button
                 variant="outline"
@@ -347,4 +347,4 @@ export function ProfileSetup({ userEmail, userName, onComplete, onSkip }: Profil
       </Card>
     </div>
   )
-} 
+}

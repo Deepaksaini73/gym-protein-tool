@@ -14,6 +14,7 @@ import { ReportTrendsChart } from "@/components/reports/ReportTrendsChart";
 import { generatePDF } from '@/lib/pdf-generator'
 import { FeedbackButton } from "@/components/shared/feedback-button"
 import { FeedbackForm } from "@/components/shared/feedback-form"
+import { useRouter } from 'next/navigation'
 
 
 const calculateGoalsMet = (dayLogs: any[], waterLog: any, profile: any) => {
@@ -165,12 +166,26 @@ const shareReport = async (data: any, profile: any) => {
   }
 };
 
+// Add these helper functions at the top
+const getISTDate = () => {
+  return new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+};
+
+const formatDateForDB = (date: Date) => {
+  const istDate = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const year = istDate.getFullYear();
+  const month = String(istDate.getMonth() + 1).padStart(2, '0');
+  const day = String(istDate.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 export default function ReportsPage() {
-  const { user } = useAuth()
-  const [selectedPeriod, setSelectedPeriod] = useState("weekly")
+  const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<any>(null)
+  const [needsProfile, setNeedsProfile] = useState(false)
+  const [selectedPeriod, setSelectedPeriod] = useState("weekly")
   const [weeklyData, setWeeklyData] = useState<any>(null)
   const [monthlyData, setMonthlyData] = useState<any>(null)
   const [showFeedback, setShowFeedback] = useState(false)
@@ -180,7 +195,7 @@ export default function ReportsPage() {
     let totalGoalsHit = 0
 
     for (let date = new Date(weekStart); date <= weekEnd; date.setDate(date.getDate() + 1)) {
-      const dateStr = date.toISOString().slice(0, 10)
+      const dateStr = formatDateForDB(date)
       const dayLogs = foodLogs.filter(log => log.date === dateStr)
       const waterLog = waterLogs.find(log => log.date === dateStr)
 
@@ -190,79 +205,104 @@ export default function ReportsPage() {
     return totalGoalsHit
   }
 
+  // Define fetchReportData before using it
+  const fetchReportData = async () => {
+    setLoading(true)
+    try {
+      // Get IST date ranges
+      const today = getISTDate()
+      const weekAgo = new Date(today)
+      weekAgo.setDate(today.getDate() - 7)
+      const monthAgo = new Date(today)
+      monthAgo.setDate(today.getDate() - 30)
+
+      // Format dates for query using IST
+      const todayStr = formatDateForDB(today)
+      const weekAgoStr = formatDateForDB(weekAgo)
+      const monthAgoStr = formatDateForDB(monthAgo)
+
+      // Fetch all required data
+      const [profileData, weekFoodLogs, monthFoodLogs, weekWaterLogs, monthWaterLogs, achievements] = await Promise.all([
+        // Get user profile
+        supabase.from('user_profiles').select('*').eq('user_id', user.id).single(),
+        // Get week's food logs
+        supabase.from('food_logs').select('*')
+          .eq('user_id', user.id)
+          .gte('date', weekAgoStr)
+          .lte('date', todayStr),
+        // Get month's food logs
+        supabase.from('food_logs').select('*')
+          .eq('user_id', user.id)
+          .gte('date', monthAgoStr)
+          .lte('date', todayStr),
+        // Get week's water logs
+        supabase.from('water_logs').select('*')
+          .eq('user_id', user.id)
+          .gte('date', weekAgoStr)
+          .lte('date', todayStr),
+        // Get month's water logs
+        supabase.from('water_logs').select('*')
+          .eq('user_id', user.id)
+          .gte('date', monthAgoStr)
+          .lte('date', todayStr),
+        // Get achievements
+        supabase.from('user_achievements').select('*')
+          .eq('user_id', user.id)
+      ])
+
+      setProfile(profileData.data)
+
+      // Process Weekly Data
+      const weeklyProcessed = {
+        period: `${weekAgoStr} to ${todayStr}`,
+        summary: calculateWeeklySummary(weekFoodLogs.data || [], weekWaterLogs.data || [], profileData.data),
+        dailyBreakdown: processDailyBreakdown(weekFoodLogs.data || [], weekWaterLogs.data || [], weekAgoStr, todayStr),
+      }
+      setWeeklyData(weeklyProcessed)
+
+      // Process Monthly Data
+      const monthlyProcessed = {
+        period: `${new Date(monthAgoStr).toLocaleString('default', { month: 'long' })} ${new Date(monthAgoStr).getFullYear()}`,
+        summary: calculateMonthlySummary(monthFoodLogs.data || [], monthWaterLogs.data || [], profileData.data),
+        weeklyBreakdown: processWeeklyBreakdown(monthFoodLogs.data || [], monthWaterLogs.data || [], monthAgoStr, todayStr),
+        topFoods: calculateTopFoods(monthFoodLogs.data || []),
+        insights: generateInsights(monthFoodLogs.data || [], monthWaterLogs.data || [], profileData.data),
+      }
+      setMonthlyData(monthlyProcessed)
+
+    } catch (error) {
+      console.error("Error fetching report data:", error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Profile check useEffect
+  useEffect(() => {
+    const checkProfile = async () => {
+      if (!user) return;
+      
+      const { data: profileData } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!profileData) {
+        setNeedsProfile(true);
+      } else {
+        setProfile(profileData);
+        fetchReportData(); // Now fetchReportData is in scope
+      }
+    };
+
+    if (user) {
+      checkProfile();
+    }
+  }, [user]); // Added proper dependency
+
   useEffect(() => {
     if (!user) return
-
-    const fetchReportData = async () => {
-      setLoading(true)
-      try {
-        // Get date ranges
-        const today = new Date()
-        const weekAgo = new Date(today)
-        weekAgo.setDate(today.getDate() - 7)
-        const monthAgo = new Date(today)
-        monthAgo.setDate(today.getDate() - 30)
-
-        // Format dates for query
-        const todayStr = today.toISOString().slice(0, 10)
-        const weekAgoStr = weekAgo.toISOString().slice(0, 10)
-        const monthAgoStr = monthAgo.toISOString().slice(0, 10)
-
-        // Fetch all required data
-        const [profileData, weekFoodLogs, monthFoodLogs, weekWaterLogs, monthWaterLogs, achievements] = await Promise.all([
-          // Get user profile
-          supabase.from('user_profiles').select('*').eq('user_id', user.id).single(),
-          // Get week's food logs
-          supabase.from('food_logs').select('*')
-            .eq('user_id', user.id)
-            .gte('date', weekAgoStr)
-            .lte('date', todayStr),
-          // Get month's food logs
-          supabase.from('food_logs').select('*')
-            .eq('user_id', user.id)
-            .gte('date', monthAgoStr)
-            .lte('date', todayStr),
-          // Get week's water logs
-          supabase.from('water_logs').select('*')
-            .eq('user_id', user.id)
-            .gte('date', weekAgoStr)
-            .lte('date', todayStr),
-          // Get month's water logs
-          supabase.from('water_logs').select('*')
-            .eq('user_id', user.id)
-            .gte('date', monthAgoStr)
-            .lte('date', todayStr),
-          // Get achievements
-          supabase.from('user_achievements').select('*')
-            .eq('user_id', user.id)
-        ])
-
-        setProfile(profileData.data)
-
-        // Process Weekly Data
-        const weeklyProcessed = {
-          period: `${weekAgoStr} to ${todayStr}`,
-          summary: calculateWeeklySummary(weekFoodLogs.data || [], weekWaterLogs.data || [], profileData.data),
-          dailyBreakdown: processDailyBreakdown(weekFoodLogs.data || [], weekWaterLogs.data || [], weekAgoStr, todayStr),
-        }
-        setWeeklyData(weeklyProcessed)
-
-        // Process Monthly Data
-        const monthlyProcessed = {
-          period: `${new Date(monthAgoStr).toLocaleString('default', { month: 'long' })} ${new Date(monthAgoStr).getFullYear()}`,
-          summary: calculateMonthlySummary(monthFoodLogs.data || [], monthWaterLogs.data || [], profileData.data),
-          weeklyBreakdown: processWeeklyBreakdown(monthFoodLogs.data || [], monthWaterLogs.data || [], monthAgoStr, todayStr),
-          topFoods: calculateTopFoods(monthFoodLogs.data || []),
-          insights: generateInsights(monthFoodLogs.data || [], monthWaterLogs.data || [], profileData.data),
-        }
-        setMonthlyData(monthlyProcessed)
-
-      } catch (error) {
-        console.error("Error fetching report data:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
 
     fetchReportData()
   }, [user])
@@ -291,7 +331,7 @@ export default function ReportsPage() {
     const end = new Date(endDate)
 
     while (currentDate <= end) {
-      const dateStr = currentDate.toISOString().slice(0, 10)
+      const dateStr = formatDateForDB(currentDate)
       const dayLogs = foodLogs.filter(log => log.date === dateStr)
       const waterLog = waterLogs.find(log => log.date === dateStr)
 
@@ -467,6 +507,67 @@ export default function ReportsPage() {
     ? (weeklyData || defaultWeeklyData) 
     : (monthlyData || defaultMonthlyData);
 
+  // First check - Auth loading
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Second check - Not logged in
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full shadow-lg border-0 bg-white/90 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle className="text-center">Sign In Required</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-center text-gray-600">
+              Please sign in to view your nutrition reports
+            </p>
+            <Button 
+              onClick={() => router.push('/')}
+              className="w-full bg-emerald-600 hover:bg-emerald-700"
+            >
+              Go to Sign In
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Third check - Needs profile setup
+  if (needsProfile) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full shadow-lg border-0 bg-white/90 backdrop-blur-sm">
+          <CardHeader>
+            <CardTitle className="text-center">Complete Your Profile</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-center text-gray-600">
+              Please set up your profile to access nutrition reports
+            </p>
+            <Button 
+              onClick={() => router.push('/profile')}
+              className="w-full bg-emerald-600 hover:bg-emerald-700"
+            >
+              Set Up Profile
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show loading only when fetching data for authenticated users with profiles
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center">
