@@ -1,5 +1,5 @@
 export { FoodLoggingHeader } from './header'
-export { PopularFoods } from './popular-foods'
+export { ShopFoodCard } from './shop-food-card'
 export { QuickAdd } from './quick-add'
 export { SearchTab } from './search-tab'
 export { PhotoTab } from './photo-tab'

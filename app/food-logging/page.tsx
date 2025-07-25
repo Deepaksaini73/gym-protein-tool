@@ -22,6 +22,8 @@ import { Button } from '@/components/ui/button'
 import { toast, Toaster } from 'sonner'
 import { FeedbackButton } from "@/components/shared/feedback-button"
 import { FeedbackForm } from "@/components/shared/feedback-form"
+import { ShopFoodCard } from "@/components/food-logging/shop-food-card"
+
 import { 
   Flame, 
   Drumstick, 
@@ -337,10 +339,10 @@ export default function FoodLoggingPage() {
     }
   }
 
-  const openFoodDialog = (food: FoodItem) => {
+  const openFoodDialog = (food: FoodItem, customQuantity?: number) => {
     setFoodDialogData({
       food,
-      quantity: 100,
+      quantity: customQuantity || 100, // Use custom quantity if provided
       mealType: "breakfast",
     })
     setShowFoodDialog(true)
@@ -432,16 +434,23 @@ export default function FoodLoggingPage() {
         })
         const data = await res.json()
         if (data && data.nutrition) {
-          // Show FoodDialog with Gemini nutrition result
+          // Show FoodDialog with Gemini nutrition result using ACTUAL quantity
           openFoodDialog({
             id: Date.now(),
             name: customFoodName,
-            calories: data.nutrition.calories,
+            calories: data.nutrition.calories, // This should already be for the entered quantity
             protein: data.nutrition.protein,
             carbs: data.nutrition.carbs,
             fats: data.nutrition.fats,
             per: `${customFoodQuantity}${customFoodUnit}`,
           })
+          
+          // Set the quantity in dialog to the actual entered amount
+          setFoodDialogData(prev => prev ? {
+            ...prev,
+            quantity: Number(customFoodQuantity) // Use the actual quantity entered
+          } : null)
+          
           setShowCustomFoodDialog(false)
           setCustomFoodName("")
           setCustomFoodQuantity("")
@@ -973,7 +982,7 @@ export default function FoodLoggingPage() {
             <FoodLoggingHeader />
 
             {/* Quick Popular Foods */}
-            <PopularFoods
+            {/* <PopularFoods
               popularFoods={popularFoods}
               onFoodSelect={(food) => openFoodDialog({
                 ...food,
@@ -981,14 +990,9 @@ export default function FoodLoggingPage() {
                 carbs: food.carbs ?? 0,
                 fats: food.fats ?? 0,
               })}
-            />
+            /> */}
             {/* Shop/Street Food Add Button */}
-            <Button
-              className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 rounded shadow mb-2"
-              onClick={() => setShowShopItemsDialog(true)}
-            >
-              Add Shop/Street Food
-            </Button>
+            <ShopFoodCard onShopFoodClick={() => setShowShopItemsDialog(true)} />
             <ShopItemsDialog
               open={showShopItemsDialog}
               onOpenChange={setShowShopItemsDialog}
