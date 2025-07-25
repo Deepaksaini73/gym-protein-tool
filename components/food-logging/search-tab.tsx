@@ -18,7 +18,7 @@ interface SearchTabProps {
   searchQuery: string
   onSearchQueryChange: (value: string) => void
   filteredFoods: FoodItem[]
-  onFoodSelect: (food: FoodItem) => void
+  onFoodSelect: (foodName: string) => void // Changed to just pass food name
   geminiLoading?: boolean
 }
 
@@ -36,7 +36,7 @@ export function SearchTab({
           <Search className="w-5 h-5 mr-2 text-emerald-600" />
           Search Foods
         </CardTitle>
-        <CardDescription>Search our database of foods and add them to your log</CardDescription>
+        <CardDescription>Search our database of foods and set your portion size</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="relative">
@@ -53,7 +53,7 @@ export function SearchTab({
           {geminiLoading && (
             <div className="flex items-center justify-center py-4 text-emerald-600">
               <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-              <span>Searching Gemini for foods...</span>
+              <span>Searching for foods...</span>
             </div>
           )}
           {filteredFoods.map((food) => (
@@ -70,14 +70,28 @@ export function SearchTab({
               <Button
                 size="sm"
                 className="bg-emerald-600 hover:bg-emerald-700"
-                onClick={() => onFoodSelect(food)}
+                onClick={() => onFoodSelect(food.name)} // Pass food name only
               >
                 <Plus className="w-4 h-4" />
               </Button>
             </div>
           ))}
+          
+          {/* Add custom search option */}
+          {searchQuery && filteredFoods.length === 0 && !geminiLoading && (
+            <div className="p-4 text-center border-2 border-dashed border-gray-200 rounded-lg">
+              <p className="text-gray-500 mb-2">No results found for "{searchQuery}"</p>
+              <Button
+                variant="outline"
+                onClick={() => onFoodSelect(searchQuery)}
+                className="border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+              >
+                Add "{searchQuery}" as custom food
+              </Button>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
   )
-} 
+}

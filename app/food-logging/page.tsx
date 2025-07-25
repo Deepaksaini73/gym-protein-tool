@@ -3,21 +3,21 @@ import { useState, useEffect, useRef } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   FoodLoggingHeader,
-  PopularFoods,
   QuickAdd,
   SearchTab,
   PhotoTab,
-  VoiceTab,
+  VoiceTab, 
   TodaysMeals,
   WaterTracker,
   FoodDialog,
   CustomFoodDialog,
   ShopItemsDialog,
+  QuantityDialog,
 } from "@/components/food-logging"
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/auth-context'
 import { Card, CardContent , CardHeader, CardTitle} from '@/components/ui/card'
-import BarcodeTab from "@/components/food-logging/barcode-tab";
+import { BarcodeTab } from "@/components/food-logging/barcode-tab"
 import { Button } from '@/components/ui/button'
 import { toast, Toaster } from 'sonner'
 import { FeedbackButton } from "@/components/shared/feedback-button"
@@ -136,6 +136,15 @@ export default function FoodLoggingPage() {
   const [showShopItemsDialog, setShowShopItemsDialog] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false)
 
+  // New state variables for quantity dialog
+  const [showQuantityDialog, setShowQuantityDialog] = useState(false)
+  const [selectedFoodName, setSelectedFoodName] = useState("")
+  const [tempQuantity, setTempQuantity] = useState("")
+  const [tempUnit, setTempUnit] = useState("g")
+  const [nutritionLoading, setNutritionLoading] = useState(false)
+
+  const [voiceTranscript, setVoiceTranscript] = useState("") // New state for voice transcript
+
   const filteredFoods = mockFoodDatabase.filter((food) =>
     food.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -204,6 +213,87 @@ export default function FoodLoggingPage() {
     }
   }
 
+  // Unified handler for food selection
+  const handleFoodNameSelect = (foodName: string) => {
+    console.log('handleFoodNameSelect called with:', foodName) // Debug log
+    
+    if (!foodName.trim()) {
+      console.log('Empty food name, returning') // Debug log
+      return
+    }
+    
+    setSelectedFoodName(foodName)
+    setTempQuantity("100") // Default quantity
+    setTempUnit("g") // Default unit
+    setShowQuantityDialog(true)
+    
+    console.log('Quantity dialog should now be open') // Debug log
+    console.log('selectedFoodName:', foodName) // Debug log
+    console.log('showQuantityDialog:', true) // Debug log
+  }
+
+  // Handler for quantity dialog submission
+  const handleQuantitySubmit = async () => {
+    console.log('handleQuantitySubmit called') // Debug log
+    console.log('selectedFoodName:', selectedFoodName) // Debug log
+    console.log('tempQuantity:', tempQuantity) // Debug log
+    console.log('tempUnit:', tempUnit) // Debug log
+    
+    if (!selectedFoodName || !tempQuantity) {
+      console.log('Missing required fields, returning') // Debug log
+      return
+    }
+    
+    setNutritionLoading(true)
+    try {
+      console.log('Sending request to API...') // Debug log
+      
+      const res = await fetch("/api/food-nutrition", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          foodName: selectedFoodName,
+          quantity: tempQuantity,
+          unit: tempUnit,
+        }),
+      })
+      const data = await res.json()
+      
+      console.log('API response:', data) // Debug log
+      
+      if (data && data.nutrition) {
+        console.log('Opening food dialog with nutrition data') // Debug log
+        
+        openFoodDialog({
+          id: Date.now(),
+          name: selectedFoodName,
+          calories: data.nutrition.calories,
+          protein: data.nutrition.protein,
+          carbs: data.nutrition.carbs || 0,
+          fats: data.nutrition.fats || 0,
+          per: `${tempQuantity}${tempUnit}`,
+        }, Number(tempQuantity))
+        
+        setShowQuantityDialog(false)
+        setSelectedFoodName("")
+        setTempQuantity("")
+        setTempUnit("g")
+      } else {
+        console.log('No nutrition data in response') // Debug log
+        toast.error("Could not get nutrition info", {
+          description: "Please try again with a more specific food description"
+        })
+      }
+    } catch (err) {
+      console.error('API error:', err) // Debug log
+      toast.error("Error contacting AI service", {
+        description: "Please check your internet connection and try again"
+      })
+    }
+    setNutritionLoading(false)
+  }
+
+  // Update photo handler
   const handlePhotoAnalyze = async () => {
     if (!selectedImage) return
     setPhotoLoading(true)
@@ -217,26 +307,7 @@ export default function FoodLoggingPage() {
       })
       const data = await res.json()
       if (data && data.nutrition && data.nutrition.food_name) {
-        // Now get nutrition info from food name
-        const nutritionRes = await fetch("/api/food-nutrition", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ foodName: data.nutrition.food_name, quantity: 100, unit: "g" }),
-        })
-        const nutritionData = await nutritionRes.json()
-        if (nutritionData && nutritionData.nutrition) {
-          openFoodDialog({
-            id: Date.now(),
-            name: data.nutrition.food_name,
-            calories: nutritionData.nutrition.calories,
-            protein: nutritionData.nutrition.protein,
-            carbs: nutritionData.nutrition.carbs,
-            fats: nutritionData.nutrition.fats,
-            per: nutritionData.nutrition.per || "100g",
-          })
-        } else {
-          alert("Could not get nutrition info for detected food.")
-        }
+        handleFoodNameSelect(data.nutrition.food_name) // Use unified handler
       } else {
         alert("Could not recognize food from photo.")
       }
@@ -278,58 +349,137 @@ export default function FoodLoggingPage() {
   // Voice recording logic for new VoiceTab
   let recognitionRef = useRef<any>(null)
 
-  const handleVoiceStart = () => {
+  const handleVoiceStart = async () => {
+    // Check microphone permission first
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream.getTracks().forEach(track => track.stop()) // Stop the stream immediately
+    } catch (error) {
+      toast.error('Microphone Access Required', {
+        description: 'Please allow microphone access to use voice input',
+      })
+      return
+    }
+
     setIsListening(true)
     setIsVoiceLoading(false)
-    // Use SpeechRecognition or webkitSpeechRecognition
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    setVoiceTranscript("") // Clear previous transcript
+    
+    // Check for browser support
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    
     if (!SpeechRecognition) {
-      alert('Speech recognition not supported in this browser.')
+      toast.error('Speech recognition not supported', {
+        description: 'Please use Chrome, Safari, or Edge browser for voice input',
+      })
       setIsListening(false)
       return
     }
+
     const recognition = new SpeechRecognition()
     recognitionRef.current = recognition
+    
+    // Configure recognition
+    recognition.continuous = false
+    recognition.interimResults = true
     recognition.lang = 'en-US'
-    recognition.interimResults = false
     recognition.maxAlternatives = 1
-    recognition.onresult = async (event: any) => {
-      setIsListening(false)
-      setIsVoiceLoading(true)
-      const transcript = event.results[0][0].transcript
-      // Send transcript to AI nutrition API
-      try {
-        const res = await fetch('/api/food-nutrition', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ foodName: transcript, quantity: 100, unit: 'g' }),
-        })
-        const data = await res.json()
-        if (data && data.nutrition) {
-          openFoodDialog({
-            id: Date.now(),
-            name: transcript,
-            calories: data.nutrition.calories,
-            protein: data.nutrition.protein,
-            carbs: data.nutrition.carbs,
-            fats: data.nutrition.fats,
-            per: '100g',
-          })
+
+    // Handle results
+    recognition.onresult = (event: any) => {
+      console.log('Voice recognition result event:', event) // Debug log
+      
+      let finalTranscript = ''
+      let interimTranscript = ''
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript
+        if (event.results[i].isFinal) {
+          finalTranscript += transcript
         } else {
-          alert('Could not get nutrition info from voice input.')
+          interimTranscript += transcript
         }
-      } catch (err) {
-        alert('Could not get nutrition info from voice input.')
       }
-      setIsVoiceLoading(false)
+
+      console.log('Final transcript:', finalTranscript) // Debug log
+      console.log('Interim transcript:', interimTranscript) // Debug log
+
+      // Show interim results
+      if (interimTranscript) {
+        setVoiceTranscript(interimTranscript)
+      }
+
+      // Process final result
+      if (finalTranscript.trim()) {
+        console.log('Processing final transcript:', finalTranscript.trim()) // Debug log
+        setVoiceTranscript(finalTranscript)
+        setIsListening(false)
+        setIsVoiceLoading(true)
+        
+        // Show transcript for 1.5 seconds then process
+        setTimeout(() => {
+          console.log('Calling handleFoodNameSelect with:', finalTranscript.trim()) // Debug log
+          handleFoodNameSelect(finalTranscript.trim())
+          setIsVoiceLoading(false)
+          setVoiceTranscript("")
+        }, 1500)
+      }
     }
-    recognition.onerror = () => {
+
+    // Handle errors
+    recognition.onerror = (event: any) => {
+      console.error('Speech recognition error:', event.error) // Debug log
       setIsListening(false)
       setIsVoiceLoading(false)
-      alert('Voice recognition failed.')
+      setVoiceTranscript("")
+      
+      let errorMessage = 'Voice recognition failed'
+      switch(event.error) {
+        case 'no-speech':
+          errorMessage = 'No speech detected. Please try again.'
+          break
+        case 'audio-capture':
+          errorMessage = 'Microphone not accessible. Please check permissions.'
+          break
+        case 'not-allowed':
+          errorMessage = 'Microphone permission denied. Please allow microphone access.'
+          break
+        case 'network':
+          errorMessage = 'Network error. Please check your internet connection.'
+          break
+        default:
+          errorMessage = `Speech recognition error: ${event.error}`
+      }
+      
+      toast.error('Voice Recognition Failed', {
+        description: errorMessage,
+      })
     }
-    recognition.start()
+
+    // Handle end
+    recognition.onend = () => {
+      console.log('Voice recognition ended') // Debug log
+      setIsListening(false)
+      if (!voiceTranscript) {
+        setIsVoiceLoading(false)
+      }
+    }
+
+    // Start recognition
+    try {
+      recognition.start()
+      console.log('Voice recognition started') // Debug log
+      toast.success('🎤 Listening...', {
+        description: 'Speak now! Say what you ate.',
+        duration: 2000,
+      })
+    } catch (error) {
+      console.error('Failed to start recognition:', error)
+      setIsListening(false)
+      toast.error('Failed to start voice recognition', {
+        description: 'Please try again',
+      })
+    }
   }
 
   const handleVoiceStop = () => {
@@ -337,6 +487,7 @@ export default function FoodLoggingPage() {
     if (recognitionRef.current) {
       recognitionRef.current.stop()
     }
+    setVoiceTranscript("")
   }
 
   const openFoodDialog = (food: FoodItem, customQuantity?: number) => {
@@ -366,7 +517,7 @@ export default function FoodLoggingPage() {
         meal_type: mealType,
         food_name: food.name,
         quantity,
-        unit: food.per.replace(/\d+/g, ''),
+        unit: food.per.replace(/\d+/g, '').trim() || 'g', // Save the actual unit
         calories: Math.round(food.calories * (quantity / 100)),
         protein: Math.round(food.protein * (quantity / 100) * 10) / 10,
         carbs: food.carbs ? Math.round(food.carbs * (quantity / 100) * 10) / 10 : null,
@@ -375,7 +526,7 @@ export default function FoodLoggingPage() {
 
       if (!error) {
         toast.success('Food logged successfully! 🍽️', {
-          description: `Added ${quantity}${food.per.replace(/\d+/g, '')} of ${food.name}`,
+          description: `Added ${quantity}${food.per.replace(/\d+/g, '').trim() || 'g'} of ${food.name}`,
           duration: 3000,
         })
 
@@ -385,37 +536,39 @@ export default function FoodLoggingPage() {
         setShowFoodDialog(false)
         setFoodDialogData(null)
         
-        // Refetch logs
+        // Refetch logs with unit included
         const { data } = await supabase
           .from('food_logs')
           .select('*')
           .eq('user_id', user.id)
           .eq('date', today)
           .order('created_at', { ascending: true })
-        if (data) {
-          const meals = ['breakfast', 'lunch', 'dinner', 'snack'].map((meal) => ({
-            name: meal.charAt(0).toUpperCase() + meal.slice(1),
-            id: meal,
-            items: data.filter((item) => item.meal_type === meal).map((item) => ({
-              food: item.food_name,
-              quantity: item.quantity,
-              calories: item.calories,
-              protein: item.protein,
-              carbs: item.carbs ?? 0,
-              fats: item.fats ?? 0,
-              logId: item.id,
-            })),
-            totalCalories: data.filter((item) => item.meal_type === meal).reduce((sum, item) => sum + (item.calories || 0), 0),
-            time: '',
-          }))
-          setLoggedMeals(meals)
-        }
-      } else {
-        toast.error('Failed to log food', {
-          description: 'Please try again',
-        })
+      
+      if (data) {
+        const meals = ['breakfast', 'lunch', 'dinner', 'snack'].map((meal) => ({
+          name: meal.charAt(0).toUpperCase() + meal.slice(1),
+          id: meal,
+          items: data.filter((item) => item.meal_type === meal).map((item) => ({
+            food: item.food_name,
+            quantity: item.quantity,
+            unit: item.unit || 'g', // Include unit from database
+            calories: item.calories,
+            protein: item.protein,
+            carbs: item.carbs ?? 0,
+            fats: item.fats ?? 0,
+            logId: item.id,
+          })),
+          totalCalories: data.filter((item) => item.meal_type === meal).reduce((sum, item) => sum + (item.calories || 0), 0),
+          time: '',
+        }))
+        setLoggedMeals(meals)
       }
+    } else {
+      toast.error('Failed to log food', {
+        description: 'Please try again',
+      })
     }
+  }
   }
 
   // New: handle custom food submit with Gemini
@@ -554,7 +707,7 @@ export default function FoodLoggingPage() {
   }
 
   // Delete food log from Supabase
-  const deleteMealItem = (mealId: number, itemIndex: number, logId?: string): void => {
+  const deleteMealItem = (mealId: number | string, itemIndex: number, logId?: string): void => {
     (async () => {
       if (!logId) return
       const { error } = await supabase.from('food_logs').delete().eq('id', logId)
@@ -569,19 +722,20 @@ export default function FoodLoggingPage() {
         })
         // Refetch logs
         if (user) {
-                const istDate = new Date().toLocaleString("en-IN", {
-              timeZone: "Asia/Kolkata",
-            });
-            const [day, month, year] = istDate.split(",")[0].split("/");
-            const todayIST = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-            console.log(todayIST);
-            const today = todayIST;
+          const istDate = new Date().toLocaleString("en-IN", {
+            timeZone: "Asia/Kolkata",
+          });
+          const [day, month, year] = istDate.split(",")[0].split("/");
+          const todayIST = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+          const today = todayIST;
+
           const { data } = await supabase
             .from('food_logs')
             .select('*')
             .eq('user_id', user.id)
             .eq('date', today)
             .order('created_at', { ascending: true })
+        
           if (data) {
             const meals = ['breakfast', 'lunch', 'dinner', 'snack'].map((meal) => ({
               name: meal.charAt(0).toUpperCase() + meal.slice(1),
@@ -589,10 +743,11 @@ export default function FoodLoggingPage() {
               items: data.filter((item) => item.meal_type === meal).map((item) => ({
                 food: item.food_name,
                 quantity: item.quantity,
+                unit: item.unit || 'g', // Include unit from database
                 calories: item.calories,
                 protein: item.protein,
-                carbs: item.carbs ?? 0,   // <-- add this line
-                fats: item.fats ?? 0,     // <-- add this line
+                carbs: item.carbs ?? 0,
+                fats: item.fats ?? 0,
                 logId: item.id,
               })),
               totalCalories: data.filter((item) => item.meal_type === meal).reduce((sum, item) => sum + (item.calories || 0), 0),
@@ -616,10 +771,11 @@ export default function FoodLoggingPage() {
           const today = todayIST;
         const { data } = await supabase
       .from('food_logs')
-      .select('*')
+      .select('*') // This already includes unit field
       .eq('user_id', user.id)
       .eq('date', today)
       .order('created_at', { ascending: true })
+
     if (data) {
       const meals = ['breakfast', 'lunch', 'dinner', 'snack'].map((meal) => ({
         name: meal.charAt(0).toUpperCase() + meal.slice(1),
@@ -627,10 +783,11 @@ export default function FoodLoggingPage() {
         items: data.filter((item) => item.meal_type === meal).map((item) => ({
           food: item.food_name,
           quantity: item.quantity,
+          unit: item.unit || 'g', // Include unit from database with fallback
           calories: item.calories,
           protein: item.protein,
-          carbs: item.carbs ?? 0,   // <-- add this line
-          fats: item.fats ?? 0,     // <-- add this line
+          carbs: item.carbs ?? 0,
+          fats: item.fats ?? 0,
           logId: item.id,
         })),
         totalCalories: data.filter((item) => item.meal_type === meal).reduce((sum, item) => sum + (item.calories || 0), 0),
@@ -1022,7 +1179,7 @@ export default function FoodLoggingPage() {
                   searchQuery={searchQuery}
                   onSearchQueryChange={setSearchQuery}
                   filteredFoods={filteredFoods.length > 0 ? filteredFoods : geminiSuggestions}
-                  onFoodSelect={openFoodDialog}
+                  onFoodSelect={handleFoodNameSelect} // Updated
                   geminiLoading={geminiLoading}
                 />
               </TabsContent>
@@ -1032,14 +1189,14 @@ export default function FoodLoggingPage() {
                 <PhotoTab
                   selectedImage={selectedImage}
                   onImageUpload={handleImageUpload}
-                  onAddPhoto={handlePhotoAnalyze}
+                  onAnalyzePhoto={handlePhotoAnalyze} // Updated
                   loading={photoLoading}
                 />
               </TabsContent>
 
               {/* Barcode Tab */}
               <TabsContent value="barcode">
-                <BarcodeTab onFoodSelect={openFoodDialog} />
+                <BarcodeTab onFoodDetect={handleFoodNameSelect} /> // Updated
               </TabsContent>
 
               {/* Voice Tab */}
@@ -1047,6 +1204,7 @@ export default function FoodLoggingPage() {
                 <VoiceTab
                   isListening={isListening}
                   isLoading={isVoiceLoading}
+                  transcript={voiceTranscript} // Add this line
                   onStart={handleVoiceStart}
                   onStop={handleVoiceStop}
                 />
@@ -1083,6 +1241,19 @@ export default function FoodLoggingPage() {
               customFoodUnit={customFoodUnit}
               onCustomFoodUnitChange={setCustomFoodUnit}
               onSubmit={handleCustomFood}
+            />
+
+            {/* Quantity Dialog */}
+            <QuantityDialog
+              open={showQuantityDialog}
+              onOpenChange={setShowQuantityDialog}
+              foodName={selectedFoodName}
+              quantity={tempQuantity}
+              onQuantityChange={setTempQuantity}
+              unit={tempUnit}
+              onUnitChange={setTempUnit}
+              onSubmit={handleQuantitySubmit}
+              loading={nutritionLoading}
             />
 
             {/* Feedback Button and Form */}

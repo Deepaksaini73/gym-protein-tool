@@ -73,7 +73,7 @@ export function CustomFoodDialog({
               >
                 <option value="g">g</option>
                 <option value="ml">ml</option>
-                <option value="serving">serving</option>
+                <option value="pcs">pcs</option>
               </select>
             </div>
           </div>
