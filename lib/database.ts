@@ -231,58 +231,56 @@ export const createUserProfile = async (userId: string, profileData: CreateProfi
 }
 
 // Update user profile
-export const updateUserProfile = async (userId: string, updateData: UpdateProfileData): Promise<UserProfile | null> => {
+export const updateUserProfile = async (userId: string, profileData: UpdateProfileData): Promise<UserProfile | null> => {
   try {
-    // Check if Supabase is properly configured
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      console.error('Supabase environment variables are not configured')
-      throw new Error('Supabase configuration missing')
-    }
-
-    // Get current profile to calculate new goals
-    const currentProfile = await getUserProfile(userId)
-    if (!currentProfile) {
-      throw new Error('User profile not found')
-    }
-
-    const updatedData = { ...currentProfile, ...updateData }
+    // Calculate BMI
+    const bmi = calculateBMI(profileData.current_weight, profileData.height)
     
+    // Calculate new nutrition goals based on updated data
     const dailyCalories = calculateDailyCalories(
-      updatedData.current_weight,
-      updatedData.height,
-      updatedData.age,
-      updatedData.gender,
-      updatedData.activity_level,
-      updatedData.fitness_goal
+      profileData.current_weight,
+      profileData.height,
+      profileData.age,
+      profileData.gender,
+      profileData.activity_level,
+      profileData.fitness_goal
     )
-
-    const macroGoals = calculateMacroGoals(dailyCalories, updatedData.fitness_goal)
-    const bmi = calculateBMI(updatedData.current_weight, updatedData.height)
+    
+    const macros = calculateMacroGoals(dailyCalories, profileData.fitness_goal)
 
     const { data, error } = await supabase
       .from('user_profiles')
       .update({
-        ...updateData,
-        bmi,
-        daily_calorie_goal: dailyCalories,
-        daily_protein_goal: macroGoals.protein,
-        daily_carbs_goal: macroGoals.carbs,
-        daily_fats_goal: macroGoals.fats,
-        updated_at: new Date().toISOString(),
+        full_name: profileData.full_name,
+        // Don't update email - keep original
+        age: profileData.age,
+        gender: profileData.gender,
+        height: profileData.height,
+        current_weight: profileData.current_weight,
+        bmi: parseFloat(bmi),
+        fitness_goal: profileData.fitness_goal,
+        target_weight: profileData.target_weight,
+        activity_level: profileData.activity_level,
+        daily_calorie_goal: profileData.daily_calorie_goal,
+        daily_water_goal: profileData.daily_water_goal,
+        daily_protein_goal: profileData.daily_protein_goal,
+        daily_carbs_goal: profileData.daily_carbs_goal,
+        daily_fats_goal: profileData.daily_fats_goal,
+        updated_at: new Date().toISOString()
       })
       .eq('user_id', userId)
       .select()
       .single()
 
     if (error) {
-      console.error('Supabase error updating user profile:', error)
-      throw error
+      console.error('Database error updating profile:', error)
+      return null
     }
 
     return data
   } catch (error) {
     console.error('Error updating user profile:', error)
-    throw error
+    return null
   }
 }
 

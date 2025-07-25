@@ -28,9 +28,10 @@ const AVAILABLE_ACHIEVEMENTS = [
   { name: "Meal Prep Master", icon: "🍱", id: "meal_master" },
 ]
 
-// Add type for profile update
+// Update the ProfileUpdateData type to match database fields
 type ProfileUpdateData = {
   full_name: string
+  email: string // Keep for reference but don't allow updates
   age: number
   gender: 'male' | 'female' | 'other'
   height: number
@@ -243,6 +244,7 @@ export default function ProfilePage() {
               if (editProfile) {
                 await handleProfileUpdate({
                   full_name: editProfile.full_name,
+                  email: editProfile.email, // Email is now read-only
                   age: editProfile.age,
                   gender: editProfile.gender as 'male' | 'female' | 'other',
                   height: editProfile.height,

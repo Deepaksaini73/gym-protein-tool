@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { User } from "lucide-react"
+import { User, Lock } from "lucide-react"
 
 interface UserProfile {
   name: string
@@ -45,13 +45,17 @@ export function PersonalInfo({ profile, isEditing, onProfileChange }: PersonalIn
             />
           </div>
           <div>
-            <label className="text-sm font-medium text-gray-700">Email</label>
+            <label className="text-sm font-medium text-gray-700 flex items-center">
+              Email
+              <Lock className="w-3 h-3 ml-1 text-gray-400" />
+            </label>
             <Input
               value={profile.email}
-              onChange={(e) => onProfileChange({ ...profile, email: e.target.value })}
-              disabled={!isEditing}
-              className="border-2 focus:border-emerald-300"
+              disabled={true} // Always disabled
+              className="border-2 bg-gray-50 text-gray-500 cursor-not-allowed"
+              readOnly
             />
+            <p className="text-xs text-gray-400 mt-1">Email cannot be changed for security reasons</p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>

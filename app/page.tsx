@@ -44,6 +44,8 @@ export default function DashboardPage() {
   const [isDataLoading, setIsDataLoading] = useState(true)
   const [weekOverview, setWeekOverview] = useState<any[]>([])
   const [showFeedback, setShowFeedback] = useState(false)
+  const [lastActiveStreak, setLastActiveStreak] = useState(0);
+  const [displayStreak, setDisplayStreak] = useState(0);
   // Add new state for refresh trigger
   const [refreshTrigger, setRefreshTrigger] = useState(0)
   const [needsProfile, setNeedsProfile] = useState(false)
@@ -182,43 +184,131 @@ export default function DashboardPage() {
         water: Number(todayWater.reduce((sum, w) => sum + (w.amount || 0), 0).toFixed(2))
       };
 
-      // Update streak calculation
-      const hasToday = todayLogs.length > 0;
-      let currentStreak = 0;
-      let maxStreakVal = 0;
+      // Move streak calculation AFTER logs are fetched and processed
+      const updateStreakLogic = async () => {
+        const today = getISTDate();
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+        
+        const todayStr = formatDateForDB(today);
+        const yesterdayStr = formatDateForDB(yesterday);
 
-      // Get streak data
-      const { data: streakData } = await supabase
-        .from("user_streaks")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
+        // Get existing streak data
+        const { data: streakData } = await supabase
+          .from("user_streaks")
+          .select("*")
+          .eq("user_id", user.id)
+          .single();
 
-      if (hasToday) {
-        currentStreak = streakData?.current_streak || 0;
-        if (currentStreak === 0) {
-          currentStreak = 1;
-          // Update streak in database
+        // Check if user logged food today
+        const todayLogs = (logs || []).filter(log => log.date === todayStr);
+        const hasLoggedToday = todayLogs.length > 0;
+
+        // Check if user logged food yesterday
+        const yesterdayLogs = (logs || []).filter(log => log.date === yesterdayStr);
+        const hasLoggedYesterday = yesterdayLogs.length > 0;
+
+        let newCurrentStreak = 0;
+        let newLastActiveStreak = 0;
+        let newMaxStreak = streakData?.max_streak || 0;
+        let streakUpdated = false;
+
+        if (streakData) {
+          const lastUpdateDate = new Date(streakData.updated_at);
+          const lastUpdateStr = formatDateForDB(lastUpdateDate);
+          const daysSinceUpdate = Math.floor((today.getTime() - lastUpdateDate.getTime()) / (24 * 60 * 60 * 1000));
+          
+          // Check if this is a new day
+          if (lastUpdateStr !== todayStr) {
+            if (hasLoggedToday) {
+              // User logged today
+              if (hasLoggedYesterday || streakData.current_streak === 0) {
+                // Continue or start streak
+                newCurrentStreak = streakData.current_streak + 1;
+                newLastActiveStreak = newCurrentStreak; // Update last active streak
+              } else if (daysSinceUpdate === 1) {
+                // Missed yesterday but continuing from before
+                newCurrentStreak = 1; // Start fresh
+                newLastActiveStreak = newCurrentStreak;
+              } else {
+                // Multiple days missed
+                newCurrentStreak = 1; // Start fresh
+                newLastActiveStreak = newCurrentStreak;
+              }
+              streakUpdated = true;
+            } else {
+              // User hasn't logged today
+              if (daysSinceUpdate >= 2) {
+                // More than 1 day gap - streak is broken
+                newCurrentStreak = 0;
+                newLastActiveStreak = 0; // Reset last active as well
+                streakUpdated = true;
+              } else {
+                // Only 1 day since last log - preserve streak info
+                newCurrentStreak = streakData.current_streak;
+                newLastActiveStreak = streakData.last_active_streak || streakData.current_streak;
+              }
+            }
+            newMaxStreak = Math.max(newCurrentStreak, streakData.max_streak);
+          } else {
+            // Same day as last update
+            newCurrentStreak = streakData.current_streak;
+            newLastActiveStreak = streakData.last_active_streak || streakData.current_streak;
+            newMaxStreak = streakData.max_streak;
+          }
+        } else {
+          // No existing streak data
+          if (hasLoggedToday) {
+            newCurrentStreak = 1;
+            newLastActiveStreak = 1;
+            newMaxStreak = 1;
+            streakUpdated = true;
+          }
+        }
+
+        // Update database if needed
+        if (streakUpdated || !streakData) {
           await supabase.from("user_streaks").upsert({
             user_id: user.id,
-            current_streak: 1,
-            max_streak: Math.max(1, streakData?.max_streak || 0),
+            current_streak: newCurrentStreak,
+            last_active_streak: newLastActiveStreak,
+            max_streak: newMaxStreak,
             updated_at: new Date().toISOString()
           });
-          
-          toast.success('🎯 Started a new streak!', {
-            description: "Keep logging meals to maintain your streak",
-          });
-        }
-        maxStreakVal = Math.max(currentStreak, streakData?.max_streak || 0);
-      }
 
-      if (isMounted.current) {
-        setStreak(currentStreak);
-        setMaxStreak(maxStreakVal);
-        setStreakActive(hasToday);
-        // ... rest of the state updates
-      }
+          // Show achievement toasts for milestones
+          if (newCurrentStreak > 0 && streakUpdated) {
+            if (newCurrentStreak === 1 && (!streakData || streakData.current_streak === 0)) {
+              toast.success('🎯 Streak started!', {
+                description: "Great job logging your first meal today!"
+              });
+            } else if (newCurrentStreak === 3) {
+              toast.success('🔥 3 day streak!', {
+                description: "You're on fire! Keep it up!"
+              });
+            } else if (newCurrentStreak === 7) {
+              toast.success('⚔️ Weekly warrior!', {
+                description: "Amazing! You've logged for a full week!"
+              });
+            } else if (newCurrentStreak > 7 && newCurrentStreak % 7 === 0) {
+              toast.success(`🏆 ${newCurrentStreak} day streak!`, {
+                description: "Incredible consistency! You're a nutrition champion!"
+              });
+            }
+          }
+        }
+
+        return {
+          currentStreak: newCurrentStreak,
+          lastActiveStreak: newLastActiveStreak,
+          maxStreak: newMaxStreak,
+          streakActive: hasLoggedToday,
+          displayStreak: hasLoggedToday ? newCurrentStreak : newLastActiveStreak // Show last active if not logged today
+        };
+      };
+
+      // Call the streak logic after logs are processed
+      const streakResult = await updateStreakLogic();
 
       // Calculate stats with fixed decimals
       const statsData = {
@@ -226,138 +316,54 @@ export default function DashboardPage() {
         avgCalories: todayLogs.length > 0 
           ? Number((dailyIntakeData.calories / todayLogs.length).toFixed(2))
           : 0,
-        bestStreak: maxStreakVal
+        bestStreak: streakResult.maxStreak
       };
 
-      // Process recent meals with IST time
-      const recentMealsData = (logs || [])
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        .slice(0, 3)
-        .map(log => ({
-          name: log.food_name,
-          calories: log.calories,
-          time: new Date(log.created_at).toLocaleTimeString('en-US', {
-            timeZone: 'Asia/Kolkata',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-          }),
-          type: log.meal_type
-        }));
-
-      // Process weekly overview
-      const weekDaysArr = getLast7Days();
-      const filledWeekDays = weekDaysArr.map(day => {
-        const dayFoodLogs = (logs || []).filter(log => log.date === day.date);
-        const dayWaterLogs = (water || []).filter(log => log.date === day.date);
-
+      // Calculate weekly overview data - ADD THIS
+      const filledWeekDays = getLast7Days().map(day => {
+        const dayLogs = (logs || []).filter(log => log.date === day.date);
+        const dayWater = (water || []).filter(w => w.date === day.date);
+        
         return {
           ...day,
-          calories: Number(dayFoodLogs.reduce((sum, log) => sum + (log.calories || 0), 0).toFixed(2)),
-          protein: Number(dayFoodLogs.reduce((sum, log) => sum + (log.protein || 0), 0).toFixed(2)),
-          carbs: Number(dayFoodLogs.reduce((sum, log) => sum + (log.carbs || 0), 0).toFixed(2)),
-          fats: Number(dayFoodLogs.reduce((sum, log) => sum + (log.fats || 0), 0).toFixed(2)),
-          water: Number(dayWaterLogs.reduce((sum, log) => sum + (log.amount || 0), 0).toFixed(2))
+          calories: Number(dayLogs.reduce((sum, log) => sum + (log.calories || 0), 0).toFixed(2)),
+          protein: Number(dayLogs.reduce((sum, log) => sum + (log.protein || 0), 0).toFixed(2)),
+          carbs: Number(dayLogs.reduce((sum, log) => sum + (log.carbs || 0), 0).toFixed(2)),
+          fats: Number(dayLogs.reduce((sum, log) => sum + (log.fats || 0), 0).toFixed(2)),
+          water: Number(dayWater.reduce((sum, w) => sum + (w.amount || 0), 0).toFixed(2))
         };
       });
 
-      // Calculate weekly goals met
-      const goalsMetCount = filledWeekDays.reduce((count, day) => {
-        const meetsGoals = day.calories >= (profileData?.daily_calorie_goal || 2000) * 0.8 &&
-                          day.water >= (profileData?.daily_water_goal || 2000) * 0.8;
-        return count + (meetsGoals ? 1 : 0);
-      }, 0);
+      // Calculate recent meals data - ADD THIS
+      const recentMealsData = (logs || [])
+        .slice(0, 5)
+        .map(log => ({
+          id: log.id,
+          name: log.food_name,
+          calories: Number((log.calories || 0).toFixed(2)),
+          protein: Number((log.protein || 0).toFixed(2)),
+          time: new Date(log.created_at).toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+          }),
+          date: log.date
+        }));
 
-      if (isMounted.current) {
-        setWeekOverview(filledWeekDays);
-        setFoodLogs(logs || []);
-        setWaterLogs(water || []);
-        setStats(statsData);
-        setDailyIntake(dailyIntakeData);
-        setRecentMeals(recentMealsData);
-        setWeeklyGoalsMet(goalsMetCount);
-      }
+      // Calculate weekly goals met count - ADD THIS
+      const goalsMetCount = filledWeekDays.filter(day => {
+        const calorieGoal = profileData?.daily_calorie_goal || 2000;
+        const proteinGoal = profileData?.daily_protein_goal || 60;
+        const waterGoal = profileData?.daily_water_goal || 2000;
+        
+        const caloriesMet = day.calories >= calorieGoal * 0.8 && day.calories <= calorieGoal * 1.2;
+        const proteinMet = day.protein >= proteinGoal;
+        const waterMet = day.water >= waterGoal;
+        
+        return caloriesMet && proteinMet && waterMet;
+      }).length;
 
-      // Calculate achievements
-      const calculateAchievements = async () => {
-        // Get earned achievements from database
-        const { data: existingAchievements } = await supabase
-          .from('user_achievements')
-          .select('*')
-          .eq('user_id', user.id)
-          .order('earned_at', { ascending: false });
-
-        // Define all available achievements with progress calculation
-        const allAchievements = [
-          {
-            name: "First Food Log",
-            icon: "🍽️",
-            description: "Log your first meal",
-            requirement: 1,
-            earned: existingAchievements?.some(a => a.achievement_name === "First Food Log") || false,
-            currentCount: Math.min(1, (logs || []).length),
-            progress: Math.min(100, ((logs || []).length > 0 ? 100 : 0))
-          },
-          {
-            name: "3 Day Streak",
-            icon: "🔥", 
-            description: "Maintain a 3 day logging streak",
-            requirement: 3,
-            earned: existingAchievements?.some(a => a.achievement_name === "3 Day Streak") || false,
-            currentCount: Math.min(3, currentStreak),
-            progress: Math.min(100, (currentStreak / 3) * 100)
-          },
-          {
-            name: "Weekly Warrior",
-            icon: "⚔️",
-            description: "Maintain a 7 day logging streak", 
-            requirement: 7,
-            earned: existingAchievements?.some(a => a.achievement_name === "Weekly Warrior") || false,
-            currentCount: Math.min(7, currentStreak),
-            progress: Math.min(100, (currentStreak / 7) * 100)
-          },
-          {
-            name: "Hydration Hero",
-            icon: "💧",
-            description: "Meet water goal for 5 days",
-            requirement: 5,
-            earned: existingAchievements?.some(a => a.achievement_name === "Hydration Hero") || false,
-            currentCount: Math.min(5, calculateWaterGoalDays()),
-            progress: Math.min(100, (calculateWaterGoalDays() / 5) * 100)
-          },
-          {
-            name: "Protein Perfect", 
-            icon: "💪",
-            description: "Meet protein goal for 5 days",
-            requirement: 5,
-            earned: existingAchievements?.some(a => a.achievement_name === "Protein Perfect") || false,
-            currentCount: Math.min(5, calculateProteinGoalDays()),
-            progress: Math.min(100, (calculateProteinGoalDays() / 5) * 100)
-          },
-          {
-            name: "Calorie Counter",
-            icon: "🎯", 
-            description: "Stay within calorie goal for 7 days",
-            requirement: 7,
-            earned: existingAchievements?.some(a => a.achievement_name === "Calorie Counter") || false,
-            currentCount: Math.min(7, calculateCalorieGoalDays()),
-            progress: Math.min(100, (calculateCalorieGoalDays() / 7) * 100)
-          }
-        ];
-
-        // Add earned dates for completed achievements
-        const achievementsWithDates = allAchievements.map(achievement => {
-          const earned = existingAchievements?.find(a => a.achievement_name === achievement.name);
-          return {
-            ...achievement,
-            earnedAt: earned?.earned_at
-          };
-        });
-
-        setRealAchievements(achievementsWithDates);
-      };
-
-      // Helper functions to calculate goal days
+      // Helper functions to calculate goal days - MOVE BEFORE calculateAchievements
       const calculateWaterGoalDays = () => {
         const dates = [...new Set((water || []).map(log => log.date))];
         return dates.filter(date => {
@@ -389,6 +395,137 @@ export default function DashboardPage() {
         }).length;
       };
 
+      // Calculate achievements - FIX currentStreak references
+      const calculateAchievements = async () => {
+        // Get earned achievements from database
+        const { data: existingAchievements } = await supabase
+          .from('user_achievements')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('earned_at', { ascending: false });
+
+        // Define all available achievements with progress calculation
+        const allAchievements = [
+          {
+            name: "First Food Log",
+            icon: "🍽️",
+            description: "Log your first meal",
+            requirement: 1,
+            earned: existingAchievements?.some(a => a.achievement_name === "First Food Log") || false,
+            currentCount: Math.min(1, (logs || []).length),
+            progress: Math.min(100, ((logs || []).length > 0 ? 100 : 0))
+          },
+          {
+            name: "3 Day Streak",
+            icon: "🔥", 
+            description: "Maintain a 3 day logging streak",
+            requirement: 3,
+            earned: existingAchievements?.some(a => a.achievement_name === "3 Day Streak") || false,
+            currentCount: Math.min(3, streakResult.currentStreak),
+            progress: Math.min(100, (streakResult.currentStreak / 3) * 100)
+          },
+          {
+            name: "Weekly Warrior",
+            icon: "⚔️",
+            description: "Maintain a 7 day logging streak", 
+            requirement: 7,
+            earned: existingAchievements?.some(a => a.achievement_name === "Weekly Warrior") || false,
+            currentCount: Math.min(7, streakResult.currentStreak),
+            progress: Math.min(100, (streakResult.currentStreak / 7) * 100)
+          },
+          {
+            name: "Hydration Hero",
+            icon: "💧",
+            description: "Meet water goal for 5 days",
+            requirement: 5,
+            earned: existingAchievements?.some(a => a.achievement_name === "Hydration Hero") || false,
+            currentCount: Math.min(5, calculateWaterGoalDays()),
+            progress: Math.min(100, (calculateWaterGoalDays() / 5) * 100)
+          },
+          {
+            name: "Protein Perfect", 
+            icon: "💪",
+            description: "Meet protein goal for 5 days",
+            requirement: 5,
+            earned: existingAchievements?.some(a => a.achievement_name === "Protein Perfect") || false,
+            currentCount: Math.min(5, calculateProteinGoalDays()),
+            progress: Math.min(100, (calculateProteinGoalDays() / 5) * 100)
+          },
+          {
+            name: "Calorie Counter",
+            icon: "🎯", 
+            description: "Stay within calorie goal for 7 days",
+            requirement: 7,
+            earned: existingAchievements?.some(a => a.achievement_name === "Calorie Counter") || false,
+            currentCount: Math.min(7, calculateCalorieGoalDays()),
+            progress: Math.min(100, (calculateCalorieGoalDays() / 7) * 100)
+          }
+        ];
+
+        // IMPORTANT: Check for newly earned achievements and save them to database
+        for (const achievement of allAchievements) {
+          const isAlreadyEarned = existingAchievements?.some(a => a.achievement_name === achievement.name);
+          const shouldBeEarned = achievement.progress >= 100;
+
+          if (shouldBeEarned && !isAlreadyEarned) {
+            // This is a newly earned achievement - save it to database
+            try {
+              const { error } = await supabase
+                .from('user_achievements')
+                .insert({
+                  user_id: user.id,
+                  achievement_name: achievement.name,
+                  achievement_icon: achievement.icon,
+                  earned_at: new Date().toISOString()
+                });
+
+              if (!error) {
+                // Show success toast
+                toast.success(`🏆 Achievement Unlocked: ${achievement.name}!`, {
+                  description: achievement.description,
+                  duration: 5000,
+                });
+
+                // Update the achievement as earned
+                achievement.earned = true;
+              } else {
+                console.error('Error saving achievement:', error);
+              }
+            } catch (error) {
+              console.error('Error inserting achievement:', error);
+            }
+          }
+        }
+
+        // Add earned dates for completed achievements
+        const achievementsWithDates = allAchievements.map(achievement => {
+          const earned = existingAchievements?.find(a => a.achievement_name === achievement.name);
+          return {
+            ...achievement,
+            earnedAt: earned?.earned_at
+          };
+        });
+
+        setRealAchievements(achievementsWithDates);
+      };
+
+      if (isMounted.current) {
+        setStreak(streakResult.currentStreak);
+        setLastActiveStreak(streakResult.lastActiveStreak);
+        setDisplayStreak(streakResult.displayStreak);
+        setMaxStreak(streakResult.maxStreak);  
+        setStreakActive(streakResult.streakActive);
+        // Set stats after calculating them
+        setStats(statsData);
+        setWeekOverview(filledWeekDays); // Now defined
+        setFoodLogs(logs || []);
+        setWaterLogs(water || []);
+        setDailyIntake(dailyIntakeData);
+        setRecentMeals(recentMealsData); // Now defined
+        setWeeklyGoalsMet(goalsMetCount); // Now defined
+      }
+
+      // Call calculateAchievements AFTER helper functions are defined
       await calculateAchievements();
 
     } catch (error) {
@@ -438,7 +575,7 @@ export default function DashboardPage() {
           table: 'food_logs',
           filter: `user_id=eq.${user.id}`
         }, () => {
-          fetchData();
+          fetchData(); // This will recalculate streak
         })
         .subscribe();
 
@@ -454,10 +591,31 @@ export default function DashboardPage() {
         })
         .subscribe();
 
+      // Add subscription to user_streaks table for real-time streak updates
+      const streakChannel = supabase
+        .channel('user-streaks')
+        .on('postgres_changes', {
+          event: '*',
+          schema: 'public',
+          table: 'user_streaks',
+          filter: `user_id=eq.${user.id}`
+        }, (payload) => {
+          // Update streak state immediately when database changes
+          if (payload.new && isMounted.current) {
+            setStreak(payload.new.current_streak);
+            setLastActiveStreak(payload.new.last_active_streak);
+            setMaxStreak(payload.new.max_streak);
+            setDisplayStreak(payload.new.last_active_streak || payload.new.current_streak);
+            setStreakActive(payload.new.current_streak > 0);
+          }
+        })
+        .subscribe();
+
       return () => {
         isMounted.current = false;
         foodChannel.unsubscribe();
         waterChannel.unsubscribe();
+        streakChannel.unsubscribe(); // Add this cleanup
       };
     }
   }, [user]);
@@ -577,7 +735,12 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 pb-24">
       <div className="px-4 py-6 space-y-6">
         {/* Header with Streak */}
-        <DashboardHeader name={profile?.full_name || user.user_metadata?.full_name || user.email} streak={streak} maxStreak={maxStreak} streakActive={streakActive} />
+        <DashboardHeader 
+            name={profile?.full_name || user.user_metadata?.full_name || user.email} 
+            streak={displayStreak} // Use displayStreak instead of streak
+            maxStreak={maxStreak} 
+            streakActive={streakActive} 
+          />
 
         {/* Quick Stats */}
         <QuickStats

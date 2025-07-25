@@ -356,9 +356,7 @@ export default function FoodLoggingPage() {
       });
       const [day, month, year] = istDate.split(",")[0].split("/");
       const todayIST = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-      console.log(todayIST);
       const today = todayIST;
-      console.log("today date in add food time ",today)
     
       const { error } = await supabase.from('food_logs').insert({
         user_id: user.id,
@@ -378,10 +376,14 @@ export default function FoodLoggingPage() {
           description: `Added ${quantity}${food.per.replace(/\d+/g, '')} of ${food.name}`,
           duration: 3000,
         })
+
+        // IMPORTANT: Add streak update logic here
+        await updateStreakAfterFoodLog();
+
         setShowFoodDialog(false)
         setFoodDialogData(null)
+        
         // Refetch logs
-        // const today = new Date().toISOString().slice(0, 10)
         const { data } = await supabase
           .from('food_logs')
           .select('*')
@@ -397,8 +399,8 @@ export default function FoodLoggingPage() {
               quantity: item.quantity,
               calories: item.calories,
               protein: item.protein,
-              carbs: item.carbs ?? 0,   // <-- add this line
-              fats: item.fats ?? 0,     // <-- add this line
+              carbs: item.carbs ?? 0,
+              fats: item.fats ?? 0,
               logId: item.id,
             })),
             totalCalories: data.filter((item) => item.meal_type === meal).reduce((sum, item) => sum + (item.calories || 0), 0),
@@ -724,6 +726,180 @@ export default function FoodLoggingPage() {
       </div>
     )
   }
+
+  // Add helper function INSIDE the component
+  const formatDateForDB = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  // Add streak update function INSIDE the component
+  const updateStreakAfterFoodLog = async () => {
+    if (!user) return;
+
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    
+    const todayStr = formatDateForDB(today);
+    const yesterdayStr = formatDateForDB(yesterday);
+
+    // Get existing streak data
+    const { data: streakData } = await supabase
+      .from("user_streaks")
+      .select("*")
+      .eq("user_id", user.id)
+      .single();
+
+    // Check if user logged food yesterday
+    const { data: yesterdayLogs } = await supabase
+      .from("food_logs")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("date", yesterdayStr);
+
+    const hasLoggedYesterday = (yesterdayLogs || []).length > 0;
+
+    let newCurrentStreak = 1;
+    let newLastActiveStreak = 1;
+    let newMaxStreak = 1;
+
+    if (streakData) {
+      const lastUpdateDate = new Date(streakData.updated_at);
+      const lastUpdateStr = formatDateForDB(lastUpdateDate);
+      
+      // Check if this is the first log today
+      if (lastUpdateStr !== todayStr) {
+        // New day with logging
+        if (hasLoggedYesterday || streakData.current_streak === 0) {
+          // Continue or start streak
+          newCurrentStreak = streakData.current_streak + 1;
+        } else {
+          // Streak broken, start fresh
+          newCurrentStreak = 1;
+        }
+        newLastActiveStreak = newCurrentStreak;
+        newMaxStreak = Math.max(newCurrentStreak, streakData.max_streak);
+
+        // Update database
+        await supabase.from("user_streaks").upsert({
+          user_id: user.id,
+          current_streak: newCurrentStreak,
+          last_active_streak: newLastActiveStreak,
+          max_streak: newMaxStreak,
+          updated_at: new Date().toISOString()
+        });
+
+        // Show achievement toasts
+        if (newCurrentStreak === 1 && streakData.current_streak === 0) {
+          toast.success('🎯 Streak started!', {
+            description: "Great job logging your first meal today!"
+          });
+        } else if (newCurrentStreak === 3) {
+          toast.success('🔥 3 day streak!', {
+            description: "You're on fire! Keep it up!"
+          });
+        } else if (newCurrentStreak === 7) {
+          toast.success('⚔️ Weekly warrior!', {
+            description: "Amazing! You've logged for a full week!"
+          });
+        }
+      }
+    } else {
+      // First time logging
+      await supabase.from("user_streaks").insert({
+        user_id: user.id,
+        current_streak: 1,
+        last_active_streak: 1,
+        max_streak: 1,
+        updated_at: new Date().toISOString()
+      });
+
+      toast.success('🎯 Streak started!', {
+        description: "Great job logging your first meal today!"
+      });
+    }
+
+    // IMPORTANT: Check for "First Food Log" achievement
+    const { data: firstLogAchievement } = await supabase
+      .from('user_achievements')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('achievement_name', 'First Food Log')
+      .single();
+
+    if (!firstLogAchievement) {
+      // User hasn't earned "First Food Log" achievement yet - award it now
+      try {
+        const { error } = await supabase
+          .from('user_achievements')
+          .insert({
+            user_id: user.id,
+            achievement_name: 'First Food Log',
+            achievement_icon: '🍽️',
+            earned_at: new Date().toISOString()
+          });
+
+        if (!error) {
+          toast.success('🏆 Achievement Unlocked: First Food Log!', {
+            description: 'Congratulations on logging your first meal!',
+            duration: 5000,
+          });
+        }
+      } catch (error) {
+        console.error('Error awarding First Food Log achievement:', error);
+      }
+    }
+
+    // Check for streak achievements
+    if (newCurrentStreak === 3) {
+      const { data: streakAchievement } = await supabase
+        .from('user_achievements')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('achievement_name', '3 Day Streak')
+        .single();
+
+      if (!streakAchievement) {
+        await supabase.from('user_achievements').insert({
+          user_id: user.id,
+          achievement_name: '3 Day Streak',
+          achievement_icon: '🔥',
+          earned_at: new Date().toISOString()
+        });
+
+        toast.success('🏆 Achievement Unlocked: 3 Day Streak!', {
+          description: 'Amazing consistency! Keep it up!',
+          duration: 5000,
+        });
+      }
+    }
+
+    if (newCurrentStreak === 7) {
+      const { data: weeklyAchievement } = await supabase
+        .from('user_achievements')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('achievement_name', 'Weekly Warrior')
+        .single();
+
+      if (!weeklyAchievement) {
+        await supabase.from('user_achievements').insert({
+          user_id: user.id,
+          achievement_name: 'Weekly Warrior',
+          achievement_icon: '⚔️',
+          earned_at: new Date().toISOString()
+        });
+
+        toast.success('🏆 Achievement Unlocked: Weekly Warrior!', {
+          description: 'One week of consistent logging!',
+          duration: 5000,
+        });
+      }
+    }
+  };
 
   return (
     <>
