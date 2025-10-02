@@ -518,10 +518,10 @@ export default function FoodLoggingPage() {
         food_name: food.name,
         quantity,
         unit: food.per.replace(/\d+/g, '').trim() || 'g', // Save the actual unit
-        calories: Math.round(food.calories * (quantity / 100)),
-        protein: Math.round(food.protein * (quantity / 100) * 10) / 10,
-        carbs: food.carbs ? Math.round(food.carbs * (quantity / 100) * 10) / 10 : null,
-        fats: food.fats ? Math.round(food.fats * (quantity / 100) * 10) / 10 : null,
+        calories: Math.round(food.calories),
+        protein: Math.round(food.protein * 10) / 10,
+        carbs: food.carbs ? Math.round(food.carbs * 10) / 10 : null,
+        fats: food.fats ? Math.round(food.fats * 10) / 10 : null,
       })
 
       if (!error) {
