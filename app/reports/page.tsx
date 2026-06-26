@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useAuth } from "@/contexts/auth-context"
 import { supabase } from "@/lib/supabase"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -15,6 +14,23 @@ import { generatePDF } from '@/lib/pdf-generator'
 import { FeedbackButton } from "@/components/shared/feedback-button"
 import { FeedbackForm } from "@/components/shared/feedback-form"
 import { useRouter } from 'next/navigation'
+
+const DEMO_USER = {
+  id: 'demo-user',
+  email: 'demo@fitness.com',
+  user_metadata: {
+    full_name: 'Demo User',
+  },
+}
+
+const DEMO_PROFILE = {
+  full_name: 'Demo User',
+  daily_calorie_goal: 2200,
+  daily_protein_goal: 120,
+  daily_carbs_goal: 250,
+  daily_fats_goal: 70,
+  daily_water_goal: 2500,
+}
 
 
 const calculateGoalsMet = (dayLogs: any[], waterLog: any, profile: any) => {
@@ -181,10 +197,11 @@ const formatDateForDB = (date: Date) => {
 
 export default function ReportsPage() {
   const router = useRouter()
-  const { user, loading: authLoading } = useAuth()
+  const user = DEMO_USER
+  const authLoading = false
+
   const [loading, setLoading] = useState(true)
-  const [profile, setProfile] = useState<any>(null)
-  const [needsProfile, setNeedsProfile] = useState(false)
+  const [profile, setProfile] = useState<any>(DEMO_PROFILE)
   const [selectedPeriod, setSelectedPeriod] = useState("weekly")
   const [weeklyData, setWeeklyData] = useState<any>(null)
   const [monthlyData, setMonthlyData] = useState<any>(null)
@@ -222,7 +239,7 @@ export default function ReportsPage() {
       const monthAgoStr = formatDateForDB(monthAgo)
 
       // Fetch all required data
-      const [profileData, weekFoodLogs, monthFoodLogs, weekWaterLogs, monthWaterLogs, achievements] = await Promise.all([
+      const [profileData, weekFoodLogs, monthFoodLogs, weekWaterLogs, monthWaterLogs] = await Promise.all([
         // Get user profile
         supabase.from('user_profiles').select('*').eq('user_id', user.id).single(),
         // Get week's food logs
@@ -245,17 +262,14 @@ export default function ReportsPage() {
           .eq('user_id', user.id)
           .gte('date', monthAgoStr)
           .lte('date', todayStr),
-        // Get achievements
-        supabase.from('user_achievements').select('*')
-          .eq('user_id', user.id)
       ])
 
-      setProfile(profileData.data)
+      setProfile(profileData.data || DEMO_PROFILE)
 
       // Process Weekly Data
       const weeklyProcessed = {
         period: `${weekAgoStr} to ${todayStr}`,
-        summary: calculateWeeklySummary(weekFoodLogs.data || [], weekWaterLogs.data || [], profileData.data),
+        summary: calculateWeeklySummary(weekFoodLogs.data || [], weekWaterLogs.data || [], profileData.data || DEMO_PROFILE),
         dailyBreakdown: processDailyBreakdown(weekFoodLogs.data || [], weekWaterLogs.data || [], weekAgoStr, todayStr),
       }
       setWeeklyData(weeklyProcessed)
@@ -263,10 +277,10 @@ export default function ReportsPage() {
       // Process Monthly Data
       const monthlyProcessed = {
         period: `${new Date(monthAgoStr).toLocaleString('default', { month: 'long' })} ${new Date(monthAgoStr).getFullYear()}`,
-        summary: calculateMonthlySummary(monthFoodLogs.data || [], monthWaterLogs.data || [], profileData.data),
+        summary: calculateMonthlySummary(monthFoodLogs.data || [], monthWaterLogs.data || [], profileData.data || DEMO_PROFILE),
         weeklyBreakdown: processWeeklyBreakdown(monthFoodLogs.data || [], monthWaterLogs.data || [], monthAgoStr, todayStr),
         topFoods: calculateTopFoods(monthFoodLogs.data || []),
-        insights: generateInsights(monthFoodLogs.data || [], monthWaterLogs.data || [], profileData.data),
+        insights: generateInsights(monthFoodLogs.data || [], monthWaterLogs.data || [], profileData.data || DEMO_PROFILE),
       }
       setMonthlyData(monthlyProcessed)
 
@@ -279,26 +293,8 @@ export default function ReportsPage() {
 
   // Profile check useEffect
   useEffect(() => {
-    const checkProfile = async () => {
-      if (!user) return;
-      
-      const { data: profileData } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!profileData) {
-        setNeedsProfile(true);
-      } else {
-        setProfile(profileData);
-        fetchReportData(); // Now fetchReportData is in scope
-      }
-    };
-
-    if (user) {
-      checkProfile();
-    }
+    setProfile(DEMO_PROFILE)
+    fetchReportData()
   }, [user]); // Added proper dependency
 
   useEffect(() => {
@@ -515,54 +511,6 @@ export default function ReportsPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading...</p>
         </div>
-      </div>
-    );
-  }
-
-  // Second check - Not logged in
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full shadow-lg border-0 bg-white/90 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-center">Sign In Required</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-center text-gray-600">
-              Please sign in to view your nutrition reports
-            </p>
-            <Button 
-              onClick={() => router.push('/')}
-              className="w-full bg-emerald-600 hover:bg-emerald-700"
-            >
-              Go to Sign In
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  // Third check - Needs profile setup
-  if (needsProfile) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full shadow-lg border-0 bg-white/90 backdrop-blur-sm">
-          <CardHeader>
-            <CardTitle className="text-center">Complete Your Profile</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-center text-gray-600">
-              Please set up your profile to access nutrition reports
-            </p>
-            <Button 
-              onClick={() => router.push('/profile')}
-              className="w-full bg-emerald-600 hover:bg-emerald-700"
-            >
-              Set Up Profile
-            </Button>
-          </CardContent>
-        </Card>
       </div>
     );
   }
